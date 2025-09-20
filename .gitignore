@@ -1,2 +1,7 @@
 .env
 .venv
+pass.cer
+.pyc
+__pycache__
+certs
+.DS_Store
