@@ -15,6 +15,7 @@ ASSETS = Path("/Users/josephcybulzebede/Documents/punchcards/assets")
 
 P12 = CERTS / "pass.p12"
 WWDR = CERTS / "AppleWWDRCA.pem"
+
 def sha1(data: bytes) -> str:
     return hashlib.sha1(data).hexdigest()
 
@@ -77,17 +78,20 @@ def make_pkpass(output_path: Path) -> Path:
         cert_pem = td / "cert.pem"
         key_pem = td / "key.pem"
         # Extract cert (no keys)
+        print(P12)
         subprocess.run(
             ["openssl", "pkcs12", "-in", str(P12), "-clcerts", "-nokeys",
-             "-passin", f"pass:{P12_PASSWORD}", "-out", str(cert_pem)],
+            "-passin", f"pass:{P12_PASSWORD}", "-out", str(cert_pem), 
+            "-legacy"], # <-- ADDED THIS FLAG
             check=True,
             capture_output=True
         )
+        print(P12)
         # Extract key
         subprocess.run(
             ["openssl", "pkcs12", "-in", str(P12), "-nocerts",
              "-passin", f"pass:{P12_PASSWORD}", "-passout", "pass:tmpkey",
-             "-out", str(key_pem)],
+             "-out", str(key_pem),"-legacy"],
             check=True,
             capture_output=True
         )

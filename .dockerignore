@@ -1,0 +1,59 @@
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# Certificates (handled separately in Cloud Run)
+certs/
+*.pem
+*.p12
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Tests
+tests/
+test_*.py
+*_test.py
+pytest_cache/
+.coverage
+
+# Documentation
+README.md
+docs/
+*.md
+
+# Alembic (migrations should be in image)
+# alembic/versions/*.pyc
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

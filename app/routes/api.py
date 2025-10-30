@@ -10,3 +10,4 @@ def server_time():
         now = conn.execute(text("select now()")).scalar_one()
     return jsonify({"time": now.isoformat()})
 
+

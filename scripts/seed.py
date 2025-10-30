@@ -61,24 +61,24 @@ def seed():
         )
 
         # WalletCard tied to Supabase Auth user
-        card, created_c = get_or_create(
-            session,
-            WalletCard,
-            program_id=program.id,
-            user_id=user_id,
-            defaults={
-                "current_punches": 0,
-                "reward_credits": 0,
-                "status": "active",
-            },
-        )
+        # card, created_c = get_or_create(
+        #     session,
+        #     WalletCard,
+        #     program_id=program.id,
+        #     user_id=user_id,
+        #     defaults={
+        #         "current_punches": 0,
+        #         "reward_credits": 0,
+        #         "status": "active",
+        #     },
+        #)
 
         session.commit()
 
         print("✅ Seed complete")
         print(f"  merchant_id: {merchant.id} ({'created' if created_m else 'existing'})")
         print(f"  program_id : {program.id} ({'created' if created_p else 'existing'})")
-        print(f"  card_id    : {card.id} ({'created' if created_c else 'existing'})")
+        #print(f"  card_id    : {card.id} ({'created' if created_c else 'existing'})")
         print(f"  auth_user  : {user_id}")
 
 if __name__ == "__main__":

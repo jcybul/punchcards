@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - FLASK_APP=app
+      - FLASK_ENV=development
+      # Add your Supabase credentials here or use .env file
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+      # Apple PassKit
+      - APPLE_PASS_TYPE_ID=${APPLE_PASS_TYPE_ID}
+      - APPLE_TEAM_ID=${APPLE_TEAM_ID}
+      - APPLE_WWDR_CERT_PATH=/app/certs/wwdr.pem
+      - APPLE_PASS_CERT_PATH=/app/certs/pass_cert.pem
+      - APPLE_PASS_KEY_PATH=/app/certs/pass_key.pem
+    volumes:
+      # Mount certs folder (not copied into image)
+      - ./certs:/app/certs:ro
+      # Mount app for hot-reloading during development
+      - ./app:/app/app
+    restart: unless-stopped
+
+  # Optional: Local PostgreSQL for testing (if not using Supabase)
+  # db:
+  #   image: postgres:15-alpine
+  #   environment:
+  #     POSTGRES_DB: punchcard
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: postgres
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+
+# volumes:
+#   postgres_data:

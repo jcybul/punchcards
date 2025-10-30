@@ -1,49 +1,40 @@
-# db.py
+# app/db.py
 import os
-import urllib.parse
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, scoped_session
+from sqlalchemy import create_engine, event
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
+
 from dotenv import load_dotenv
+load_dotenv()
 
-load_dotenv() 
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
-def get_database_url() -> str:
-    """
-    Build a proper SQLAlchemy connection string for Supabase.
-    Requires these env vars in your .env:
-      DB_USER=postgres.<project-ref>
-      DB_PASS=your-password
-      DB_HOST=db.<project-ref>.supabase.co
-      DB_PORT=5432
-      DB_NAME=postgres
-    """
-    user = os.getenv("user")
-    password = os.getenv("password")
-    host = os.getenv("host")
-    port = os.getenv("port", "5432")
-    name = os.getenv("dbname", "postgres")
+is_cloud_run = os.getenv("K_SERVICE") is not None
 
-    if not all([user, password, host]):
-        raise RuntimeError("Missing required DB env vars (DB_USER, DB_PASS, DB_HOST)")
+if is_cloud_run:
+    # Cloud Run: Very aggressive connection management
+    engine = create_engine(
+        DATABASE_URL,
+        pool_size=4,
+        max_overflow=0,
+        pool_recycle=60,      
+        pool_pre_ping=True,
+        pool_timeout=15,      
+        echo=False
+    )
+else:
+    engine = create_engine(
+        DATABASE_URL,
+        poolclass=NullPool,
+        echo=False
+    )
 
-    # URL encode the password (handles @, :, /, etc.)
-    password = urllib.parse.quote_plus(password)
+# @event.listens_for(engine, "connect")
+# def receive_connect(dbapi_conn, connection_record):
+#     print(f"DB connection opened: {id(dbapi_conn)}")
 
-    return f"postgresql+psycopg://{user}:{password}@{host}:{port}/{name}?sslmode=require"
+# @event.listens_for(engine, "close")
+# def receive_close(dbapi_conn, connection_record):
+#     print(f"DB connection closed: {id(dbapi_conn)}")
 
-
-# Engine & Session setup
-DATABASE_URL = get_database_url()
-engine = create_engine(DATABASE_URL, future=True)
-
-SessionLocal = scoped_session(
-    sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
-)
-
-# Dependency for Flask endpoints
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

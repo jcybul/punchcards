@@ -20,6 +20,9 @@ class Merchant(Base):
     contact_email: Mapped[str] = mapped_column(Text, nullable=False)
     wallet_brand_color: Mapped[str] = mapped_column(Text, default="#111111")
     wallet_logo_url: Mapped[str | None] = mapped_column(Text)
+    wallet_strip_color: Mapped[str] = mapped_column(Text, default="#6E463A",nullable=True)
+    wallet_foreground_color: Mapped[str] = mapped_column(Text, default="#FFFFFF", nullable=True) 
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 class Location(Base):
@@ -38,6 +41,12 @@ class PunchProgram(Base):
     punches_required: Mapped[int] = mapped_column(Integer, nullable=False)
     expires_after_days: Mapped[int | None] = mapped_column(Integer)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    wallet_filled_icon_url: Mapped[str | None] = mapped_column(Text)
+    wallet_empty_icon_url: Mapped[str | None] = mapped_column(Text)
+    google_program_details: Mapped[str | None] = mapped_column(Text)
+    google_terms_conditions: Mapped[str | None] = mapped_column(Text)  
+    google_website_url: Mapped[str | None] = mapped_column(Text)      
+    google_help_url: Mapped[str | None] = mapped_column(Text) 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 class WalletCard(Base):
@@ -107,7 +116,6 @@ from sqlalchemy import Text, Date, DateTime
 
 class Profile(Base):
     __tablename__ = "profiles"
-    # Just a UUID PK; no ForeignKey here
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
 
     first_name: Mapped[str | None] = mapped_column(Text)
@@ -115,8 +123,6 @@ class Profile(Base):
     birthdate:  Mapped[datetime | None] = mapped_column(Date)  # or DateTime if you prefer
     platform_role: Mapped[str] = mapped_column(Text, default="user", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-
-
 
 # NEW: merchant_users (per-merchant roles)
 class MerchantUser(Base):

@@ -10,7 +10,8 @@ from flask import request, g, abort
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db import engine
+from app.db import SessionLocal, engine
+from app.exceptions import NotFound
 from app.models import Profile, MerchantUser, WalletCard, PunchProgram, Merchant
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -20,8 +21,6 @@ SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")
 if not SUPABASE_JWT_SECRET:
     # Don't crash import in dev, but fail fast when first used
     pass
-
-
 # ──────────────────────────────────────────────────────────────────────────────
 # Low-level JWT utilities
 
@@ -31,7 +30,6 @@ def _bearer_token() -> Optional[str]:
     if not auth.startswith("Bearer "):
         return None
     return auth.split(" ", 1)[1].strip()
-
 
 def decode_supabase_jwt(token: str) -> Optional[dict]:
     """Decode a Supabase access token (HS256). Returns payload dict or None."""
@@ -58,6 +56,48 @@ def current_user_id() -> Optional[str]:
     payload = decode_supabase_jwt(tok)
     return payload.get("sub") if payload else None
 
+
+def get_user_info(user_id: str) -> dict:
+    """
+    Get user profile and role information.
+    
+    Args:
+        user_id: UUID of the user
+        
+    Returns:
+        dict with user profile and merchant info (if applicable)
+        
+    Raises:
+        NotFound: If user profile doesn't exist
+    """
+    with SessionLocal() as db:
+        profile = db.get(Profile, user_id)
+        
+        if not profile:
+            raise NotFound(f"User profile {user_id} not found")
+        
+        # Check if user is staff at any merchant
+        merchant_user = db.scalar(
+            select(MerchantUser)
+            .where(MerchantUser.user_id == user_id)
+            .limit(1)
+        )
+        
+        # Build result
+        result = {
+            "id": str(profile.id),
+            "platform_role": profile.platform_role,
+            "first_name": profile.first_name,
+            "last_name": profile.last_name,
+            "birthdate": profile.birthdate.isoformat() if profile.birthdate else None
+        }
+        
+        # Add merchant info if they're staff
+        if merchant_user:
+            result["merchant_id"] = str(merchant_user.merchant_id)
+            result["merchant_role"] = merchant_user.role
+        
+        return result
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Decorators

@@ -1,12 +1,269 @@
-import tempfile
+# app/apple_passes.py
+from __future__ import annotations
+import os, json, uuid, io, zipfile, hashlib, subprocess, tempfile
 from pathlib import Path
+from dotenv import load_dotenv
+from app.services.asset_service import get_program_icon, get_default_asset
+from app.services.strip_generator import generate_strip_with_punches
 
-def build_pkpass(card, program) -> str:
+load_dotenv()
+
+TEAM_ID = os.environ["APPLE_TEAM_ID"]
+PASS_TYPE_ID = os.environ["PASS_TYPE_ID"]
+P12_PASSWORD = os.environ["PASS_P12_PASSWORD"]
+ORG_NAME = os.getenv("ORG_NAME", "Froyo ltda")
+BASE_URL = os.getenv("BASE_URL", "http://localhost:8080")  
+
+if os.getenv("WALLET_CERTS_DIR") == "/apple-certs":
+    # Cloud Run paths
+    P12 = Path("/apple-certs/pass/secrets/certs/pass.p12")
+    WWDR = Path("/apple-certs/wwdr/secrets/certs/AppleWWDRCA.pem")
+    ASSETS = Path("/app/assets")
+else:
+    # Local development paths
+    CERTS = Path(os.getenv("WALLET_CERTS_DIR", "/Users/josephcybulzebede/Documents/punchcards/certs"))
+    P12 = CERTS / "pass.p12"
+    WWDR = CERTS / "AppleWWDRCA.pem"
+    ASSETS = Path(os.getenv("WALLET_ASSETS_DIR", "/Users/josephcybulzebede/Documents/punchcards/assets"))
+    
+def _sha1(data: bytes) -> str:
+    return hashlib.sha1(data).hexdigest()
+
+def hex_to_rgb(hex_color: str) -> str:
+    """Convert #RRGGBB to R,G,B format for Apple Wallet."""
+    hex_color = hex_color.lstrip('#')
+    r = int(hex_color[0:2], 16)
+    g = int(hex_color[2:4], 16)
+    b = int(hex_color[4:6], 16)
+    return f"{r},{g},{b}"
+
+
+
+def _build_pass_json(
+    serial: str, 
+    auth_token: str,
+    *, 
+    punches: int, 
+    org: str,
+    group: str,
+    punches_required: int,
+    reward_credits: int,
+    status: str, 
+    logo_text: str | None = None,
+    background_color: str = "#111111",  # NEW
+    foreground_color: str = "#FFFFFF"   # NEW
+) -> dict:
+    if reward_credits > 0:
+        secondary_fields =[
+            {
+                "key": "rewards",
+                "label": "Rewards Available",
+                "value": str(reward_credits)
+            },
+            {
+                    "key": "progress",
+                    "label": "Progress",
+                    "value": f"{punches} of {punches_required}"
+            }
+        ]
+    else:
+         secondary_fields =[
+            {
+                    "key": "progress",
+                    "label": "Progress",
+                    "value": f"{punches} of {punches_required}"
+            }
+        ]
+        
+    
+    pass_json = {
+        "formatVersion": 1,
+        "passTypeIdentifier": PASS_TYPE_ID,
+        "teamIdentifier": TEAM_ID,
+        "organizationName": org,               
+        "description": f"{org} Punch Card", 
+        "logoText": logo_text or org, 
+        "serialNumber": serial,
+        "foregroundColor": f"rgb({hex_to_rgb(foreground_color)})",
+        "backgroundColor": f"rgb({hex_to_rgb(background_color)})",
+       "groupingIdentifier": group,
+        "barcode": {
+            "format": "PKBarcodeFormatQR",
+            "message": serial,
+            "messageEncoding": "iso-8859-1"
+        },
+        "storeCard": {
+            
+            "secondaryFields": secondary_fields,
+            
+            "auxiliaryFields": [
+                {
+                    "key": "status", 
+                    "label": "Status", 
+                    "value": status
+                }
+            ]
+        }
+    }
+    
+    if BASE_URL and BASE_URL != "http://localhost:8080":
+        pass_json["webServiceURL"] = BASE_URL
+        pass_json["authenticationToken"] = auth_token
+    
+    return pass_json
+
+def _sign_manifest_and_collect(files: dict[str, bytes]) -> dict[str, bytes]:
     """
-    Build and sign a .pkpass for a given WalletCard.
-    For now, just return a placeholder file to prove wiring works.
+    Given pass files (including pass.json), compute manifest.json, sign it with your p12 + WWDR,
+    and return the updated files dict with 'manifest.json' and 'signature' entries.
     """
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pkpass")
-    tmp.write(b"placeholder pkpass content")
-    tmp.close()
-    return tmp.name
+    # 1) manifest.json (Apple examples use SHA-1)
+    manifest = {fname: _sha1(data) for fname, data in files.items()}
+    manifest_bytes = json.dumps(manifest, separators=(",", ":")).encode("utf-8")
+    files["manifest.json"] = manifest_bytes
+
+    # 2) signature (PKCS#7 detached over manifest.json)
+    with tempfile.TemporaryDirectory() as td:
+        tdp = Path(td)
+        (tdp / "manifest.json").write_bytes(manifest_bytes)
+
+        cert_pem = tdp / "cert.pem"
+        key_pem = tdp / "key.pem"
+
+        # Extract cert (no keys)
+        subprocess.run(
+            ["openssl", "pkcs12", "-in", str(P12), "-clcerts", "-nokeys",
+             "-passin", f"pass:{P12_PASSWORD}", "-out", str(cert_pem),"-legacy"],
+            check=True, capture_output=True
+        )
+        # Extract private key (password-protected temp key)
+        
+        try:
+            subprocess.run(
+                ["openssl", "pkcs12", "-in", str(P12), "-nocerts",
+                "-passin", f"pass:{P12_PASSWORD}", "-passout", "pass:tmpkey",
+                "-out", str(key_pem),"-legacy"],
+                check=True, capture_output=True
+            )
+        except subprocess.CalledProcessError as e:
+            # Helpful debug on cert/WWDR issues
+            print("CMD:", " ".join(e.cmd))
+            print("STDOUT:", e.stdout.decode(errors="ignore"))
+            print("STDERR:", e.stderr.decode(errors="ignore"))
+            raise
+
+        sig_path = tdp / "signature"
+        try:
+            subprocess.run(
+                ["openssl", "smime", "-binary", "-sign",
+                 "-signer", str(cert_pem),
+                 "-inkey", str(key_pem),
+                 "-certfile", str(WWDR),
+                 "-in", str(tdp / "manifest.json"),
+                 "-out", str(sig_path),
+                 "-outform", "DER",
+                 "-passin", "pass:tmpkey"],
+                check=True, capture_output=True
+            )
+        except subprocess.CalledProcessError as e:
+            # Helpful debug on cert/WWDR issues
+            print("CMD:", " ".join(e.cmd))
+            print("STDOUT:", e.stdout.decode(errors="ignore"))
+            print("STDERR:", e.stderr.decode(errors="ignore"))
+            raise
+
+        files["signature"] = sig_path.read_bytes()
+
+    return files
+
+def build_pkpass(card, program,merchant, *, logo_text: str | None = None, use_dynamic_strip: bool = True) -> bytes:
+    """
+    Build and sign a .pkpass for a given WalletCard + PunchProgram.
+    Returns BYTES (ready to send as application/vnd.apple.pkpass).
+    NOW WITH LIVE UPDATES via webServiceURL!
+    """
+    # serial ties the pass to the card (keep stable per card)
+    serial = str(card.id)
+    auth_token = card.auth_token  # Use the card's unique auth token
+    
+    
+    background_color = merchant.wallet_brand_color or "#111111"
+    foreground_color = merchant.wallet_foreground_color or "#FFFFFF"
+    strip_color = merchant.wallet_strip_color or "#6E463A"
+
+
+    # 1) Collect files in memory
+    pass_json = _build_pass_json(
+        serial,
+        auth_token,
+        punches=card.current_punches or 0,
+        org = program.name,
+        group= str(program.id),
+        punches_required=program.punches_required,
+        reward_credits=card.reward_credits or 0,
+        status=card.status or "active",
+        logo_text=logo_text or merchant.name,
+        background_color=background_color,
+        foreground_color=foreground_color
+    )
+    files: dict[str, bytes] = {}
+    files["pass.json"] = json.dumps(pass_json, separators=(",", ":")).encode("utf-8")
+
+    # required assets
+    icon = get_default_asset("icon.png")
+    icon_2x = get_default_asset("icon@2x.png")
+    
+    if icon:
+        files["icon.png"] = icon
+    if icon_2x:
+        files["icon@2x.png"] = icon_2x
+
+    # optional static assets
+    logo = get_default_asset("logo.png")
+    logo_2x = get_default_asset("logo@2x.png")
+    if logo:
+        files["logo.png"] = logo
+    if logo_2x:
+        files["logo@2x.png"] = logo_2x
+    
+    # Generate dynamic strip with punch indicators
+    if use_dynamic_strip:
+        try:
+            
+            strip_2x = generate_strip_with_punches(
+                punches=card.current_punches or 0,
+                punches_required=program.punches_required,
+                reward_credits=card.reward_credits or 0,
+                strip_color=strip_color,
+                filled_icon_url=program.wallet_filled_icon_url,
+                empty_icon_url=program.wallet_empty_icon_url
+            )
+            files["strip@2x.png"] = strip_2x
+            files["strip.png"] = strip_2x
+            
+        except Exception as e:
+            print(f"Error generating strip: {e}")
+            
+        except ImportError:
+            # Fallback to static strip if generator not available
+            for name in ("strip.png", "strip@2x.png"):
+                p = ASSETS / name
+                if p.exists():
+                    files[name] = p.read_bytes()
+    else:
+        # Use static strip images
+        for name in ("strip.png", "strip@2x.png"):
+            p = ASSETS / name
+            if p.exists():
+                files[name] = p.read_bytes()
+
+    # 2) Sign manifest and append signature
+    files = _sign_manifest_and_collect(files)
+
+    # 3) Create the pkpass ZIP in memory
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as z:
+        for name, data in files.items():
+            z.writestr(name, data)
+
+    return buf.getvalue()
