@@ -3,8 +3,13 @@ from __future__ import annotations
 import os, json, uuid, io, zipfile, hashlib, subprocess, tempfile
 from pathlib import Path
 from dotenv import load_dotenv
-from app.services.asset_service import get_program_icon, get_default_asset
+from app.services.asset_service import get_program_icon, get_default_asset, get_merchant_logo
 from app.services.strip_generator import generate_strip_with_punches
+
+import time
+import logging
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -50,9 +55,12 @@ def _build_pass_json(
     reward_credits: int,
     status: str, 
     logo_text: str | None = None,
-    background_color: str = "#111111",  # NEW
-    foreground_color: str = "#FFFFFF"   # NEW
+    background_color: str = "#111111",
+    foreground_color: str = "#FFFFFF",
+    terms_and_conditions: str
 ) -> dict:
+    
+    card_code = serial.split('-')[0].upper()
     if reward_credits > 0:
         secondary_fields =[
             {
@@ -90,7 +98,8 @@ def _build_pass_json(
         "barcode": {
             "format": "PKBarcodeFormatQR",
             "message": serial,
-            "messageEncoding": "iso-8859-1"
+            "messageEncoding": "iso-8859-1",
+             "altText": card_code
         },
         "storeCard": {
             
@@ -102,7 +111,20 @@ def _build_pass_json(
                     "label": "Status", 
                     "value": status
                 }
-            ]
+            ],
+            "backFields": [
+        {
+            "key": "terms",
+            "label": "Terms & Conditions",
+            "value": terms_and_conditions or "Valid at participating locations. Not transferable."
+        },
+        {
+            "key": "contact",
+            "label": "Contact Info",
+            "value": "Support@cashbackpanama.com"
+        }
+        
+        ]
         }
     }
     
@@ -121,7 +143,7 @@ def _sign_manifest_and_collect(files: dict[str, bytes]) -> dict[str, bytes]:
     manifest = {fname: _sha1(data) for fname, data in files.items()}
     manifest_bytes = json.dumps(manifest, separators=(",", ":")).encode("utf-8")
     files["manifest.json"] = manifest_bytes
-
+    
     # 2) signature (PKCS#7 detached over manifest.json)
     with tempfile.TemporaryDirectory() as td:
         tdp = Path(td)
@@ -130,27 +152,37 @@ def _sign_manifest_and_collect(files: dict[str, bytes]) -> dict[str, bytes]:
         cert_pem = tdp / "cert.pem"
         key_pem = tdp / "key.pem"
 
-        # Extract cert (no keys)
-        subprocess.run(
-            ["openssl", "pkcs12", "-in", str(P12), "-clcerts", "-nokeys",
-             "-passin", f"pass:{P12_PASSWORD}", "-out", str(cert_pem),"-legacy"],
-            check=True, capture_output=True
-        )
-        # Extract private key (password-protected temp key)
+        # # Extract cert (no keys)
+        # try:
+        #     subprocess.run(
+        #         ["openssl", "pkcs12", "-in", str(P12), "-clcerts", "-nokeys",
+        #         "-passin", f"pass:{P12_PASSWORD}", "-out", str(cert_pem),"-legacy"],
+        #         check=True, capture_output=True
+        #     )
+        # except subprocess.CalledProcessError as e:
+        #     # Helpful debug on cert/WWDR issues
+        #     print("CMD:", " ".join(e.cmd))
+        #     print("STDOUT:", e.stdout.decode(errors="ignore"))
+        #     print("STDERR:", e.stderr.decode(errors="ignore"))
+        #     raise
+        # # Extract private key (password-protected temp key)
         
-        try:
-            subprocess.run(
-                ["openssl", "pkcs12", "-in", str(P12), "-nocerts",
-                "-passin", f"pass:{P12_PASSWORD}", "-passout", "pass:tmpkey",
-                "-out", str(key_pem),"-legacy"],
-                check=True, capture_output=True
-            )
-        except subprocess.CalledProcessError as e:
-            # Helpful debug on cert/WWDR issues
-            print("CMD:", " ".join(e.cmd))
-            print("STDOUT:", e.stdout.decode(errors="ignore"))
-            print("STDERR:", e.stderr.decode(errors="ignore"))
-            raise
+        # try:
+        #     subprocess.run(
+        #         ["openssl", "pkcs12", "-in", str(P12), "-nocerts",
+        #         "-passin", f"pass:{P12_PASSWORD}", "-passout", "pass:tmpkey",
+        #         "-out", str(key_pem),"-legacy"],
+        #         check=True, capture_output=True
+        #     )
+        # except subprocess.CalledProcessError as e:
+        #     # Helpful debug on cert/WWDR issues
+        #     print("CMD:", " ".join(e.cmd))
+        #     print("STDOUT:", e.stdout.decode(errors="ignore"))
+        #     print("STDERR:", e.stderr.decode(errors="ignore"))
+        #     raise
+
+        _extract_p12_cert(P12, P12_PASSWORD, cert_pem)
+        _extract_p12_key(P12, P12_PASSWORD, key_pem, temp_password="tmpkey")
 
         sig_path = tdp / "signature"
         try:
@@ -166,7 +198,6 @@ def _sign_manifest_and_collect(files: dict[str, bytes]) -> dict[str, bytes]:
                 check=True, capture_output=True
             )
         except subprocess.CalledProcessError as e:
-            # Helpful debug on cert/WWDR issues
             print("CMD:", " ".join(e.cmd))
             print("STDOUT:", e.stdout.decode(errors="ignore"))
             print("STDERR:", e.stderr.decode(errors="ignore"))
@@ -176,13 +207,70 @@ def _sign_manifest_and_collect(files: dict[str, bytes]) -> dict[str, bytes]:
 
     return files
 
+def _extract_p12_cert(p12_path, password, output_path):
+    """Extract certificate from P12. Try modern first, fallback to legacy."""
+    try:
+        subprocess.run(
+            ["openssl", "pkcs12", "-in", str(p12_path), "-clcerts", "-nokeys",
+             "-passin", f"pass:{password}", "-out", str(output_path), "-legacy"],
+            check=True,
+            capture_output=True
+        )
+        return
+    except subprocess.CalledProcessError:
+        pass  
+        print("Fall back to no legacy")
+
+    try:
+        subprocess.run(
+            ["openssl", "pkcs12", "-in", str(p12_path), "-clcerts", "-nokeys",
+             "-passin", f"pass:{password}", "-out", str(output_path)],
+            check=True,
+            capture_output=True
+        )
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"Failed to extract certificate from P12: {e.stderr.decode()}")
+
+
+def _extract_p12_key(p12_path, password, output_path, temp_password="tmpkey"):
+    """Extract private key from P12. Try modern first, fallback to legacy."""
+    try:
+        subprocess.run(
+            ["openssl", "pkcs12", "-in", str(p12_path), "-nocerts",
+             "-passin", f"pass:{password}", "-passout", f"pass:{temp_password}",
+             "-out", str(output_path), "-legacy"],
+            check=True,
+            capture_output=True
+        )
+        return
+    except subprocess.CalledProcessError:
+        pass 
+        print("Fall back to no legacy")
+    
+    try:
+        subprocess.run(
+            ["openssl", "pkcs12", "-in", str(p12_path), "-nocerts",
+             "-passin", f"pass:{password}", "-passout", f"pass:{temp_password}",
+             "-out", str(output_path)],
+            check=True,
+            capture_output=True
+        )
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"Failed to extract private key from P12: {e.stderr.decode()}")
+
+
 def build_pkpass(card, program,merchant, *, logo_text: str | None = None, use_dynamic_strip: bool = True) -> bytes:
     """
     Build and sign a .pkpass for a given WalletCard + PunchProgram.
     Returns BYTES (ready to send as application/vnd.apple.pkpass).
     NOW WITH LIVE UPDATES via webServiceURL!
     """
+    
+    overall_start = time.time()
+    logger.debug(f"Building pass for card {card.id}")
+    
     # serial ties the pass to the card (keep stable per card)
+    t1 = time.time()
     serial = str(card.id)
     auth_token = card.auth_token  # Use the card's unique auth token
     
@@ -204,12 +292,22 @@ def build_pkpass(card, program,merchant, *, logo_text: str | None = None, use_dy
         status=card.status or "active",
         logo_text=logo_text or merchant.name,
         background_color=background_color,
-        foreground_color=foreground_color
+        foreground_color=foreground_color,
+        terms_and_conditions=program.google_terms_conditions
     )
+    
+    logger.debug(f"  ├─ JSON built: {(time.time() - t1)*1000:.0f}ms")
+    t2 = time.time()
+    
+    
     files: dict[str, bytes] = {}
     files["pass.json"] = json.dumps(pass_json, separators=(",", ":")).encode("utf-8")
+    logger.debug(f"  ├─ Files dict created: {(time.time() - t2)*1000:.0f}ms")
+    
+    
 
     # required assets
+    t3 = time.time()
     icon = get_default_asset("icon.png")
     icon_2x = get_default_asset("icon@2x.png")
     
@@ -219,14 +317,19 @@ def build_pkpass(card, program,merchant, *, logo_text: str | None = None, use_dy
         files["icon@2x.png"] = icon_2x
 
     # optional static assets
-    logo = get_default_asset("logo.png")
-    logo_2x = get_default_asset("logo@2x.png")
+    logo = get_merchant_logo(merchant.wallet_logo_url)
+    logo_2x = get_merchant_logo(merchant.wallet_logo_url)
+    
     if logo:
         files["logo.png"] = logo
     if logo_2x:
         files["logo@2x.png"] = logo_2x
+    logger.debug(f"  ├─ Default assets loaded: {(time.time() - t3)*1000:.0f}ms")
     
+    
+
     # Generate dynamic strip with punch indicators
+    t4 = time.time()
     if use_dynamic_strip:
         try:
             
@@ -240,6 +343,7 @@ def build_pkpass(card, program,merchant, *, logo_text: str | None = None, use_dy
             )
             files["strip@2x.png"] = strip_2x
             files["strip.png"] = strip_2x
+            
             
         except Exception as e:
             print(f"Error generating strip: {e}")
@@ -256,14 +360,24 @@ def build_pkpass(card, program,merchant, *, logo_text: str | None = None, use_dy
             p = ASSETS / name
             if p.exists():
                 files[name] = p.read_bytes()
+                
+    logger.debug(f"  ├─ Strip generated: {(time.time() - t4)*1000:.0f}ms")
 
     # 2) Sign manifest and append signature
+    t5 = time.time()
     files = _sign_manifest_and_collect(files)
+    logger.info(f"  ├─ Manifest signed: {(time.time() - t5)*1000:.0f}ms")
 
     # 3) Create the pkpass ZIP in memory
+    t6 = time.time()
+
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as z:
         for name, data in files.items():
             z.writestr(name, data)
+    logger.debug(f"  ├─ ZIP created: {(time.time() - t6)*1000:.0f}ms")
+    
+    total = (time.time() - overall_start) * 1000
+    logger.debug(f"  └─ ✅ Total: {total:.0f}ms")
 
     return buf.getvalue()

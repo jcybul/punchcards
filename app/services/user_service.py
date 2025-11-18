@@ -37,7 +37,8 @@ def get_user_cards(user_id: str) -> list[dict]:
                 "reward_credits": card.reward_credits,
                 "status": card.status,
                 "created_at": card.created_at.isoformat(),
-                "wallet_brand_color": merchant.wallet_brand_color
+                "wallet_brand_color": merchant.wallet_brand_color,
+                "foreground_color": merchant.wallet_foreground_color
             })
         
         return result

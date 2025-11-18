@@ -21,16 +21,26 @@ def create_app():
     
     CORS(app, resources={
         r"/api/*": {
-            "origins": "*",  # For development - allow all origins
+            "origins": "*",
             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
             "allow_headers": ["Content-Type", "Authorization"]
         }
     })
     
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
+    level=os.getenv("level") or "info"
+    print(level)
+    
+    if level == "debug":
+    
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+    else:
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
 
     # ensure DB reachable (no-op metadata create; we use Alembic for real schema)
     # with engine.begin() as conn:

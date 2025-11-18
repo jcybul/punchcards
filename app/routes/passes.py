@@ -10,6 +10,8 @@ from app.services.auth_service import require_auth, current_user_id, require_mer
 from app.services.punch_service import punch_card, NotFound, BadRequest, get_merchant_from_card
 from app.services.google_wallet_service import get_or_create_google
 import logging
+import time
+
 
 bp = Blueprint("passes", __name__)
 logger = logging.getLogger(__name__)

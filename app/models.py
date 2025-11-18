@@ -44,7 +44,7 @@ class PunchProgram(Base):
     wallet_filled_icon_url: Mapped[str | None] = mapped_column(Text)
     wallet_empty_icon_url: Mapped[str | None] = mapped_column(Text)
     google_program_details: Mapped[str | None] = mapped_column(Text)
-    google_terms_conditions: Mapped[str | None] = mapped_column(Text)  
+    google_terms_conditions: Mapped[str | None] = mapped_column(Text)
     google_website_url: Mapped[str | None] = mapped_column(Text)      
     google_help_url: Mapped[str | None] = mapped_column(Text) 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

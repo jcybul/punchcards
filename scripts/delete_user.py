@@ -7,7 +7,7 @@ load_dotenv()
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
-user_id = "b55357db-ebd8-44ba-99d1-32480bbafefd"
+user_id = "ee41dd7f-1329-43f9-a36c-a587d66d519b"
 
 url = f"{SUPABASE_URL}/auth/v1/admin/users/{user_id}"
 headers = {

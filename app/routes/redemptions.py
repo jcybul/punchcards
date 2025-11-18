@@ -25,13 +25,14 @@ def redeem():
     staff_id = request.args.get("staff_id")
     
     if not card_id:
-        abort(400, description="card_id required")
+        return jsonify({"error": "Card not required", "message": str(e)}), 400
     
     # Get merchant from card for authorization
     merchant_id = get_merchant_from_card(card_id)
 
     if not merchant_id:
-        abort(404, description="Card not found")
+        return jsonify({"error": "Card not found", "message": str(e)}), 404
+
     
     # Check staff authorization
     require_merchant_role(merchant_id, allowed=('owner', 'manager', 'staff'))
@@ -47,10 +48,11 @@ def redeem():
         return jsonify(result), 200
         
     except CardNotFound as e:
-        abort(404, description=str(e))
+        return jsonify({"error": "Card not found", "message": str(e)}), 404
     except CardNotActive as e:
-        abort(400, description=str(e))
+        return jsonify({"error": "Card not active", "message": str(e)}), 400
     except InsufficientRewards as e:
-        abort(400, description=str(e))
+        return jsonify({"error": "Insufficient rewards", "message": str(e)}), 400
     except Exception as e:
-        abort(500, description=str(e))
+        logger.error(f"Unexpected error: {e}", exc_info=True)
+        return jsonify({"error": "Internal server error", "message": str(e)}), 500
