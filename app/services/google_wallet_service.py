@@ -4,6 +4,7 @@ Google Wallet pass generation using direct HTTP requests
 Avoids googleapiclient.discovery issues on Cloud Run
 """
 
+from datetime import datetime, timezone
 import os
 import re
 import json
@@ -13,6 +14,8 @@ import jwt
 import requests
 from google.oauth2 import service_account
 import google.auth.transport.requests
+from app.services.expiration_service import calculate_expiration_date
+from app.services.utils_functions_service import ensure_naive_utc
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +127,7 @@ def create_loyalty_class(program, merchant):
         "issuerName": merchant.name,
         "programName": program.name,
         "hexBackgroundColor": background_color,
+        "textModulesData": [] ,
         "reviewStatus": "UNDER_REVIEW",
         
         "programLogo": {
@@ -163,6 +167,19 @@ def create_loyalty_class(program, merchant):
         loyalty_class["programDetails"] = {
             "defaultValue": {"language": "en-US", "value": program.google_program_details}
         }
+        
+    if program.expiration_enabled:
+        expiration_type_text = {
+            'rolling': 'Rolling expiration - extends with activity',
+            'fixed': 'Fixed expiration from card creation',
+            'hybrid': 'Extends with activity up to maximum'
+        }.get(program.expiration_type, 'Cards expire after inactivity')
+        
+        loyalty_class["textModulesData"].append({
+            "header": "Card Expiration",
+            "body": f"{program.expiration_months} months. {expiration_type_text}",
+            "id": "expiration_policy"
+        })
     
     # Try to create
     result = make_api_request("POST", "loyaltyClass", loyalty_class)
@@ -267,12 +284,60 @@ def create_or_update_loyalty_object(card, program, merchant):
             "balance": {"int": card.reward_credits}
         }
         loyalty_object["textModulesData"].insert(1, {
-            "header": "🎁 Rewards",
+            "header": "Rewards",
             "body": f"You have {card.reward_credits} reward{'s' if card.reward_credits > 1 else ''} ready to redeem!",
             "id": "rewards"
         })
+        
+    if card.expires_at:
+        now = datetime.utcnow()
+        expires_at_utc = ensure_naive_utc(card.expires_at)
+        
+        loyalty_object["validTimeInterval"] = {
+            "start": {
+                "date": card.created_at.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+            },
+            "end": {
+                "date": card.expires_at.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+            }
+        }
+        
+        # Calculate days remaining
+        days_remaining = (expires_at_utc - now).days
+        
+        # Add expiration info to text modules
+        if days_remaining <= 0:
+            # Expired
+            loyalty_object["state"] = "EXPIRED"
+            expiration_text = "EXPIRED"
+            expiration_header = "Card Status"
+        elif days_remaining <= 7:
+            # Expiring very soon - urgent
+            expiration_text = f"Expires in {days_remaining} day{'s' if days_remaining != 1 else ''}"
+            expiration_header = "URGENT"
+        elif days_remaining <= 30:
+            # Expiring soon
+            expiration_text = f"Expires in {days_remaining} days"
+            expiration_header = "Valid Until"
+        else:
+            # Normal expiration display
+            expiration_text = card.expires_at.strftime("%b %d, %Y")
+            expiration_header = "Valid Until"
+        
+        # Add expiration module
+        loyalty_object["textModulesData"].append({
+            "header": expiration_header,
+            "body": expiration_text,
+            "id": "expiration"
+        })
+        
+        if days_remaining > 0:
+            loyalty_object["infoModuleData"]["labelValueRows"].append({
+                "columns": [
+                    {"label": "Expires", "value": card.expires_at.strftime("%b %d, %Y")}
+                ]
+            })
     
-    # Try to create
     result = make_api_request("POST", "loyaltyObject", loyalty_object)
     
     if result and result.get("status") == "exists":
@@ -355,12 +420,17 @@ def get_or_create_google(program_id: str, user_id: str):
         
         if not card:
             card = WalletCard(
-                user_id=user_uuid,
-                program_id=program_uuid,
+                program_id=program.id,
+                user_id=user_id,
                 current_punches=0,
                 reward_credits=0,
-                status='active'
-            )
+                status="active",
+                lifetime_punches=0,
+                lifetime_rewards=0,
+                expiration_notified=False
+                )
+            card.expires_at = calculate_expiration_date(program, card)
+
             db.add(card)
             db.commit()
             db.refresh(card)
@@ -392,3 +462,5 @@ def get_or_create_google(program_id: str, user_id: str):
             "current_punches": card.current_punches,
             "reward_credits": card.reward_credits
         })
+        
+        

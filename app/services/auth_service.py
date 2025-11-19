@@ -155,6 +155,7 @@ def require_merchant_role(merchant_id: str, allowed: Iterable[str] = ("owner", "
     uid = getattr(g, "user_id", None)
     if not uid:
         abort(401, description="Unauthorized")
+    print(merchant_id,uid)
     with Session(engine) as s:
         row = s.execute(
             select(MerchantUser.role).where(
@@ -162,6 +163,7 @@ def require_merchant_role(merchant_id: str, allowed: Iterable[str] = ("owner", "
                 MerchantUser.user_id == uid,
             )
         ).first()
+        
         if not row or row[0] not in tuple(allowed):
             abort(403, description="Forbidden")
 
@@ -202,6 +204,17 @@ def require_card_owner_or_merchant_staff(card_id: str):
         if not staff:
             abort(403, description="Forbidden")
 
+def verify_cron_token(f):
+    @functools.wraps(f)
+    def cron_wrapper(*args, **kwargs):
+        token = request.headers.get('X-Cron-Token')
+        expected_token = os.getenv('CRON_TOKEN')
+        print(expected_token)
+        if not token or token != expected_token:
+            return {'error': 'Unauthorized Missing cron token or token is incorrect'}, 403
+        
+        return f(*args, **kwargs)
+    return cron_wrapper
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Convenience helpers for routes

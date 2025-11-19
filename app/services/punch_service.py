@@ -1,8 +1,10 @@
 # app/services/punch_service.py
 # Add this import at the top
+from datetime import datetime
 import time
 from app.models import PunchProgram, WalletDeviceReg,WalletCard, Punch, Merchant
-from app.services.aps_service import notify_pass_updated
+from app.services.aps_service import notify_pass_updated 
+from app.services.expiration_service import extend_card_expiration
 from app.services.google_wallet_service import update_pass
 
 from app.db import SessionLocal
@@ -43,6 +45,12 @@ def punch_card(card_id: str,created_by: str):
         if card.status != "active":
             raise BadRequest(f"Card is not active (status: {card.status})")
         
+        if card.expires_at and card.expires_at < datetime.utcnow():
+            raise ValueError("Card has expired. Please get a new card.")
+        
+        program = db.get(PunchProgram, card.program_id)
+        merchant = db.get(Merchant,program.merchant_id)
+        
         # Add punch
         punch = Punch(
             wallet_card_id=card.id,
@@ -54,17 +62,28 @@ def punch_card(card_id: str,created_by: str):
         
         card.current_punches += 1
         
-        program = db.get(PunchProgram, card.program_id)
-        merchant = db.get(Merchant,program.merchant_id)
-        if card.current_punches >= program.punches_required:
-            card.reward_credits += 1
-            card.current_punches = 0  # Reset punches
+        card.lifetime_punches = (card.lifetime_punches or 0) + 1  # Reset punches
         
         # IMPORTANT: Increment update_tag to trigger pass update
         card.update_tag = int(time.time())
         
+        reward_earned = False
+        if card.current_punches >= program.punches_required:
+            card.reward_credits += 1
+            card.current_punches = 0
+            card.lifetime_rewards = (card.lifetime_rewards or 0) + 1
+            reward_earned = True
+            logger.info(f"Reward earned for card {card.id}")
+        
         db.commit()
         db.refresh(card)
+        
+        
+        try:
+            card = extend_card_expiration(card.id, program)
+        except Exception as e:
+            logger.error(f"Failed to extend expiration: {e}")
+        
         
         # Send push notification to all registered devices
         apple_devices = db.query(WalletDeviceReg).filter_by(card_id=card.id).count()

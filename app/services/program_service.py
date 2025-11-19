@@ -5,9 +5,14 @@ from sqlalchemy.orm import Session,joinedload
 
 from app.db import engine
 from app.models import PunchProgram, WalletCard,Merchant, Redemption, MerchantUser
+from app.services.expiration_service import calculate_expiration_date
 from app.apple_passes import build_pkpass
 from app.exceptions import NotFound
 from app.db import SessionLocal
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 
 def get_program(program_id):
@@ -105,8 +110,9 @@ def get_create_program_pass(program_id,user_id):
         ## get the wallet pass if exist wit the user id and program id 
         
         wallet_pass = session.query(WalletCard).filter(
-                    (WalletCard.program_id == program.id) & (WalletCard.user_id == user_id)
-                ).first()        
+                    (WalletCard.program_id == program.id) & (WalletCard.user_id == user_id) & (WalletCard.status == 'active')
+                ).first()    
+        logger.debug(wallet_pass)    
         if not wallet_pass:
             new_pass = WalletCard(
                 program_id=program.id,
@@ -114,10 +120,17 @@ def get_create_program_pass(program_id,user_id):
                 current_punches=0,
                 reward_credits=0,
                 status="active",
-            )
-            session.add(new_pass)
+                lifetime_punches=0,
+                lifetime_rewards=0,
+                expiration_notified=False
+                )
+            new_pass.expires_at = calculate_expiration_date(program, new_pass)
+            session.add(new_pass)            
+
             try:
                 session.flush()
+                logger.info(f"Created card {new_pass.id} with expiration {new_pass.expires_at}")
+
             except IntegrityError:
                 session.rollback()
                 new_pass = session.query(WalletCard).filter(

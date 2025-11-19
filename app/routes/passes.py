@@ -53,7 +53,8 @@ def punch():
         "reward_credits": card.reward_credits,
         "update_tag": card.update_tag,
         "status": card.status,
-        "punched_by": staff_user_id
+        "punched_by": staff_user_id,
+        "expiration": card.expires_at
     })
     
 @bp.route("/apple/get_or_create/")

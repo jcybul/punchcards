@@ -1,7 +1,7 @@
 # app/models.py  (only the changed bits)
 from __future__ import annotations
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-from sqlalchemy import ForeignKey, Text, Integer, Boolean, DateTime, Numeric, UniqueConstraint, Date
+from sqlalchemy import Float, ForeignKey, String, Text, Integer, Boolean, DateTime, Numeric, UniqueConstraint, Date, text
 from sqlalchemy.dialects.postgresql import UUID
 from secrets import token_hex
 from datetime import datetime
@@ -13,6 +13,15 @@ class Base(DeclarativeBase):
 def uuid_pk() -> Mapped[uuid.UUID]:
     return mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
+def uuid_fk(table_column: str):
+    """Helper for UUID foreign keys"""
+    from sqlalchemy.dialects.postgresql import UUID
+    return mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(table_column),
+        nullable=False
+    )
+
 class Merchant(Base):
     __tablename__ = "merchants"
     id: Mapped[uuid.UUID] = uuid_pk()
@@ -22,8 +31,40 @@ class Merchant(Base):
     wallet_logo_url: Mapped[str | None] = mapped_column(Text)
     wallet_strip_color: Mapped[str] = mapped_column(Text, default="#6E463A",nullable=True)
     wallet_foreground_color: Mapped[str] = mapped_column(Text, default="#FFFFFF", nullable=True) 
+    
+    
+    ## Location info
+    latitude: Mapped[float | None] = mapped_column(Float)
+    longitude: Mapped[float | None] = mapped_column(Float)
+    
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow,nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow,nullable=True)
+    
+    locations: Mapped[list["MerchantLocation"]] = relationship(back_populates="merchant", cascade="all, delete-orphan")
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    
+
+
+class MerchantLocation(Base):
+    __tablename__ = "merchant_locations"
+    
+    id: Mapped[uuid.UUID] = uuid_pk()
+    
+    merchant_id: Mapped[str] = uuid_fk("merchants.id")
+    
+    name: Mapped[str] = mapped_column(Text, nullable=True) ## make null
+    address: Mapped[str | None] = mapped_column(Text)
+    latitude: Mapped[float | None] = mapped_column(Float)
+    longitude: Mapped[float | None] = mapped_column(Float)
+    phone: Mapped[str | None] = mapped_column(Text)
+    
+    status: Mapped[str] = mapped_column(Text, default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow,nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow,nullable=True)
+    
+    # Relationships
+    merchant: Mapped["Merchant"] = relationship(back_populates="locations")
+
 
 class Location(Base):
     __tablename__ = "locations"
@@ -31,7 +72,7 @@ class Location(Base):
     merchant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("merchants.id", ondelete="CASCADE"), nullable=False)
     name: Mapped[str] = mapped_column(Text, nullable=False)
     address: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow,nullable=True)
 
 class PunchProgram(Base):
     __tablename__ = "punch_programs"
@@ -47,7 +88,20 @@ class PunchProgram(Base):
     google_terms_conditions: Mapped[str | None] = mapped_column(Text)
     google_website_url: Mapped[str | None] = mapped_column(Text)      
     google_help_url: Mapped[str | None] = mapped_column(Text) 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    
+    ## expiration settings
+    expiration_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=True) 
+    expiration_months: Mapped[int] = mapped_column(Integer, default=6, nullable=True) ##
+    expiration_type: Mapped[str] = mapped_column(Text, default='rolling', nullable=True)
+    expiration_extension_months: Mapped[int] = mapped_column(Integer, default=3, nullable=True)
+    expiration_max_months: Mapped[int | None] = mapped_column(Integer)
+    expiration_warning_days: Mapped[int] = mapped_column(Integer, default=30, nullable=True)
+    
+    # logs
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow,nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow,nullable=True)
+
+    
 
 class WalletCard(Base):
     __tablename__ = "wallet_cards"
@@ -67,8 +121,23 @@ class WalletCard(Base):
     # NEW: per-pass auth + update tag (for PassKit web service & caching)
     auth_token: Mapped[str | None] = mapped_column(Text, default=lambda: token_hex(32))
     update_tag: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
-
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    
+    lifetime_punches: Mapped[int] = mapped_column(Integer, default=0, nullable=True)
+    lifetime_rewards: Mapped[int] = mapped_column(Integer, default=0, nullable=True)
+    
+    # Gamification
+    visit_streak: Mapped[int | None] = mapped_column(Integer)
+    last_visit_date: Mapped[datetime | None] = mapped_column(DateTime)
+    
+    # Expiration
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_activity_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=True)
+    expiration_notified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=True)
+    
+    # Status
+    status: Mapped[str] = mapped_column(Text, default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow,nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow,nullable=True)
 
     __table_args__ = (
         # enforce one card per (user, program)

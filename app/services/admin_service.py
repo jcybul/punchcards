@@ -71,6 +71,7 @@ def add_user_to_merchant(user_id: str, merchant_id: str, role="staff"):
             MerchantUser.merchant_id == merchant_id
         ).first()
         
+        
         if existing:
             print(f"⚠️  User already has role '{existing.role}' for {merchant.name}")
             # Optionally update role

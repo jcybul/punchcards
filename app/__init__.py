@@ -12,6 +12,7 @@ from app.routes.redemptions import bp as redemption_bp
 from app.routes.user import bp as user_bp
 from app.routes.program import bp as program_bp
 from flask_cors import CORS
+from app.routes.cron import bp as cron_bp
 import logging
 load_dotenv()
 def create_app():
@@ -52,6 +53,7 @@ def create_app():
     app.register_blueprint(passes_bp,url_prefix="/api/passes")
     app.register_blueprint(redemption_bp,url_prefix="/api/redemptions")
     app.register_blueprint(program_bp,url_prefix="/api/program")
+    app.register_blueprint(cron_bp,url_prefix="/api/cron")
     app.register_blueprint(google_wallet.bp)
     app.register_blueprint(wallet_service.bp)
 

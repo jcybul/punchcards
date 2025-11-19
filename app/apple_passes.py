@@ -1,10 +1,12 @@
 # app/apple_passes.py
 from __future__ import annotations
+from datetime import datetime
 import os, json, uuid, io, zipfile, hashlib, subprocess, tempfile
 from pathlib import Path
 from dotenv import load_dotenv
 from app.services.asset_service import get_program_icon, get_default_asset, get_merchant_logo
 from app.services.strip_generator import generate_strip_with_punches
+from app.services.utils_functions_service import ensure_naive_utc
 
 import time
 import logging
@@ -47,6 +49,7 @@ def hex_to_rgb(hex_color: str) -> str:
 def _build_pass_json(
     serial: str, 
     auth_token: str,
+    card,
     *, 
     punches: int, 
     org: str,
@@ -65,12 +68,12 @@ def _build_pass_json(
         secondary_fields =[
             {
                 "key": "rewards",
-                "label": "Rewards Available",
+                "label": "REWARDS AVAILABLE",
                 "value": str(reward_credits)
             },
             {
                     "key": "progress",
-                    "label": "Progress",
+                    "label": "PROGRESS",
                     "value": f"{punches} of {punches_required}"
             }
         ]
@@ -78,7 +81,7 @@ def _build_pass_json(
          secondary_fields =[
             {
                     "key": "progress",
-                    "label": "Progress",
+                    "label": "PROGRESS",
                     "value": f"{punches} of {punches_required}"
             }
         ]
@@ -105,13 +108,7 @@ def _build_pass_json(
             
             "secondaryFields": secondary_fields,
             
-            "auxiliaryFields": [
-                {
-                    "key": "status", 
-                    "label": "Status", 
-                    "value": status
-                }
-            ],
+            "auxiliaryFields": [],
             "backFields": [
         {
             "key": "terms",
@@ -127,6 +124,56 @@ def _build_pass_json(
         ]
         }
     }
+    
+    if card.expires_at:
+        now = datetime.utcnow()
+        if hasattr(card.expires_at, 'isoformat'):
+            expiration_iso = card.expires_at.isoformat()
+            if 'T' in expiration_iso and not expiration_iso.endswith('Z') and '+' not in expiration_iso:
+                # Naive datetime - add Z for UTC
+                expiration_iso = expiration_iso + 'Z'
+        else:
+            expiration_iso = str(card.expires_at)
+        
+        
+        pass_json["expirationDate"] = expiration_iso
+        
+        
+        expires_at = card.expires_at
+        if hasattr(expires_at, 'tzinfo') and expires_at.tzinfo is not None:
+            expires_at = expires_at.replace(tzinfo=None)
+            
+        logger.debug(f"now: {now}, tzinfo: {now.tzinfo}")
+        logger.debug(f"expires_at: {card.expires_at}, tzinfo: {card.expires_at.tzinfo}")
+        logger.debug(f"Type: {type(card.expires_at)}")
+                
+        if card.expires_at < now:
+            pass_json["voided"] = True
+        
+        # Calculate days remaining
+        days_remaining = (expires_at - now).days
+        
+        # Format expiration text
+        if days_remaining <= 0:
+            expiration_text = "EXPIRED"
+            expiration_label = "Status"
+        elif days_remaining <= 7:
+            expiration_text = f"Expires in {days_remaining} day{'s' if days_remaining != 1 else ''}"
+            expiration_label = "URGENT"
+        elif days_remaining <= 30:
+            expiration_text = f"Expires in {days_remaining} days"
+            expiration_label = "VALID UNTIL"
+        else:
+            expiration_text = expires_at.strftime("%b %d, %Y")
+            expiration_label = "VALID UNTIL"
+        
+        
+        pass_json["storeCard"]["auxiliaryFields"].append({
+            "key": "expiration",
+            "label": expiration_label,
+            "value": expiration_text
+        })
+    
     
     if BASE_URL and BASE_URL != "http://localhost:8080":
         pass_json["webServiceURL"] = BASE_URL
@@ -284,6 +331,7 @@ def build_pkpass(card, program,merchant, *, logo_text: str | None = None, use_dy
     pass_json = _build_pass_json(
         serial,
         auth_token,
+        card,
         punches=card.current_punches or 0,
         org = program.name,
         group= str(program.id),
