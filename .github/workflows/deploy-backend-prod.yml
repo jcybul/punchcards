@@ -35,7 +35,7 @@ jobs:
             --platform linux/amd64 \
             -t gcr.io/punchcards/punchcard-api:${{ github.sha }} \
             -t gcr.io/punchcards/punchcard-api:latest \
-            ./backend
+            .
 
       - name: Push image to Container Registry
         run: |
