@@ -5,13 +5,12 @@ on:
     branches:
       - main
     paths:
-      - 'backend/**'
       - '.github/workflows/deploy-backend-prod.yml'
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: Punchcards-frontend-prod
+    environment: Production
 
 
     steps:
@@ -21,7 +20,7 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
