@@ -1,0 +1,51 @@
+name: Deploy Backend to Cloud Run - Production
+
+on:
+  push:
+    branches:
+      - staging
+    paths:
+      - '.github/workflows/deploy-Staging-prod.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: Staging
+
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+
+      - name: Configure Docker authentication
+        run: |
+          gcloud auth configure-docker gcr.io
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            --platform linux/amd64 \
+            -t gcr.io/punchcards/punchcard-api-staging:${{ github.sha }} \
+            -t gcr.io/punchcards/punchcard-api-staging:latest \
+            .
+
+      - name: Push image to Container Registry
+        run: |
+          docker push gcr.io/punchcards/punchcard-api-staging:${{ github.sha }}
+          docker push gcr.io/punchcards/punchcard-api-staging:latest
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy punchcard-api-staging \
+            --image=gcr.io/punchcards/punchcard-api-staging:${{ github.sha }} \
+            --region=us-central1 \
+            --platform=managed \
+            --project=punchcards
