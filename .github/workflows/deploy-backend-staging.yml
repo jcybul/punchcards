@@ -5,7 +5,7 @@ on:
     branches:
       - staging
     paths:
-      - '.github/workflows/deploy-Staging-prod.yml'
+      - '.github/workflows/deploy-staging-prod.yml'
 
 jobs:
   deploy:
