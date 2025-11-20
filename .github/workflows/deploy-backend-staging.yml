@@ -5,6 +5,7 @@ on:
     branches:
       - staging
     paths:
+      - '.'
       - '.github/workflows/deploy-backend-staging.yml'
 
 jobs:
