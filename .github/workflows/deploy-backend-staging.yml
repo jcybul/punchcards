@@ -4,16 +4,11 @@ on:
   push:
     branches:
       - staging
-    paths:
-      - '.'
-      - '.github/workflows/deploy-backend-staging.yml'
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     environment: Staging
-
-
 
     steps:
       - name: Checkout code
