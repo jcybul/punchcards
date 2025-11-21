@@ -406,6 +406,8 @@ def get_or_create_google(program_id: str, user_id: str):
     from app.db import SessionLocal
     from app.models import WalletCard, PunchProgram, Merchant
     
+    
+    
     try:
         program_uuid = UUID(program_id)
         user_uuid = UUID(user_id)
@@ -413,6 +415,11 @@ def get_or_create_google(program_id: str, user_id: str):
         return jsonify({"error": "Invalid UUID format"}), 400
     
     with SessionLocal() as db:
+        
+        program = db.query(PunchProgram).filter(PunchProgram.id == program_id).first()
+        if not program:
+            return f"failed to find program with id {program_id}"
+        
         card = db.query(WalletCard).filter(
             (WalletCard.program_id == program.id) & (WalletCard.user_id == user_uuid) & (WalletCard.status == 'active')
                 ).first()    
