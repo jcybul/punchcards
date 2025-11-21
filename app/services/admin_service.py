@@ -14,7 +14,7 @@ KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
 def create_user(email,password):
     if not SUPABASE_URL or not KEY:
-        raise SystemExit("❌ Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in your .env")
+        raise SystemExit("Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in your .env")
 
     url = f"{SUPABASE_URL}/auth/v1/admin/users"
     headers = {
@@ -26,7 +26,7 @@ def create_user(email,password):
     resp = requests.post(url, headers=headers, json={
         "email": email,
         "password": password,
-        "email_confirm": True   # mark confirmed so you can log in immediately
+        "email_confirm": True 
     })
     resp.raise_for_status()
 

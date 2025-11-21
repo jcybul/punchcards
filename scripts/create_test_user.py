@@ -7,7 +7,7 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
 if not SUPABASE_URL or not KEY:
-    raise SystemExit("❌ Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in your .env")
+    raise SystemExit("Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in your .env")
 
 email = "testuser@example.com"
 password = "TempPass123!"

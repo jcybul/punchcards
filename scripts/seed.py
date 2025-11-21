@@ -15,7 +15,7 @@ def _uuid(value: str) -> uuid.UUID:
     try:
         return uuid.UUID(value)
     except Exception:
-        raise SystemExit("❌ AUTH_USER_ID must be a valid UUID from Supabase Auth → Users")
+        raise SystemExit("AUTH_USER_ID must be a valid UUID from Supabase Auth → Users")
 
 def get_or_create(session: Session, model, defaults: dict | None = None, **lookup):
     """Utility to avoid duplicate inserts when reseeding."""
@@ -35,7 +35,7 @@ def get_or_create(session: Session, model, defaults: dict | None = None, **looku
 
 def seed():
     if not AUTH_USER_ID:
-        raise SystemExit("❌ Set AUTH_USER_ID in your .env (Supabase Auth user UUID).")
+        raise SystemExit("Set AUTH_USER_ID in your .env (Supabase Auth user UUID).")
 
     user_id = _uuid(AUTH_USER_ID)
 

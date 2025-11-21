@@ -63,3 +63,5 @@ def signup_admin():
         return _json_error(r.status_code, err.get("message") or str(err))
 
     return jsonify(r.json()), 201
+
+

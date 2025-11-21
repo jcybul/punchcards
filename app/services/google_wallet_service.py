@@ -413,10 +413,10 @@ def get_or_create_google(program_id: str, user_id: str):
         return jsonify({"error": "Invalid UUID format"}), 400
     
     with SessionLocal() as db:
-        card = db.query(WalletCard).filter_by(
-            user_id=user_uuid,
-            program_id=program_uuid
-        ).first()
+        card = db.query(WalletCard).filter(
+            (WalletCard.program_id == program.id) & (WalletCard.user_id == user_uuid) & (WalletCard.status == 'active')
+                ).first()    
+        logger.debug(card)    
         
         if not card:
             card = WalletCard(

@@ -45,4 +45,4 @@ jobs:
             --image=gcr.io/punchcards/punchcard-api-staging:${{ github.sha }} \
             --region=us-central1 \
             --platform=managed \
-            --project=punchcards
+

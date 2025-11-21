@@ -5,3 +5,4 @@ pass.cer
 __pycache__
 certs
 .DS_Store
+.env.prod
