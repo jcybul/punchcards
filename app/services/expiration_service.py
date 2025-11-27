@@ -28,17 +28,20 @@ def calculate_expiration_date(program: PunchProgram, card: WalletCard = None) ->
     now = datetime.utcnow()
     
     if program.expiration_type == 'fixed':
-        base_date = card.created_at if card.id else now
-        logger.debug(now)
+        if card:
+            base_date = card.created_at
+        else:
+            base_date = now
+        
         return base_date + timedelta(days=30 * program.expiration_months)
     
     elif program.expiration_type == 'rolling':
         # Rolling: X months from now (last activity)
-        return now + timedelta(days=30 * program.expiration_months)
+        return now + timedelta(days=program.expiration_extension_days)
     
     elif program.expiration_type == 'hybrid':
         # Hybrid: X months from now, but capped at max from creation
-        new_expiration = now + timedelta(days=30 * program.expiration_extension_months)
+        new_expiration = now + timedelta(days=program.expiration_extension_days)
         
         if card and program.expiration_max_months:
             max_expiration = card.created_at + timedelta(days=30 * program.expiration_max_months)
@@ -46,8 +49,8 @@ def calculate_expiration_date(program: PunchProgram, card: WalletCard = None) ->
         
         return new_expiration
     
-    # Default to rolling
-    return now + timedelta(days=30 * program.expiration_months)
+    logger.warning(f"Unknown expiration type: {program.expiration_type}, defaulting to rolling")
+    return now + timedelta(days=program.expiration_extension_days)
 
 
 def extend_card_expiration(card_id: str, program: PunchProgram) -> WalletCard:
