@@ -93,7 +93,7 @@ def _build_pass_json(
         "teamIdentifier": TEAM_ID,
         "organizationName": org,               
         "description": f"{org} Punch Card", 
-        "logoText": logo_text or org, 
+        #"logoText": logo_text or org, 
         "serialNumber": serial,
         "foregroundColor": f"rgb({hex_to_rgb(foreground_color)})",
         "backgroundColor": f"rgb({hex_to_rgb(background_color)})",

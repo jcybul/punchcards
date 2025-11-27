@@ -96,7 +96,6 @@ class PunchProgram(Base):
     expiration_extension_months: Mapped[int] = mapped_column(Integer, default=3, nullable=True)
     expiration_max_months: Mapped[int | None] = mapped_column(Integer)
     expiration_warning_days: Mapped[int] = mapped_column(Integer, default=30, nullable=True)
-    
     # logs
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow,nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow,nullable=True)

@@ -30,7 +30,7 @@ _credentials = None
 
 def normalize_id(value: str) -> str:
     """Sanitize object/class IDs for Google Wallet (lowercase + allowed chars only)."""
-    return re.sub(r"[^a-z0-9._-]", "", str(value).lower())
+    return re.sub(r"[^a-z0-9._-]", "", str(value).lower()) 
 
 
 def get_credentials():
@@ -128,8 +128,16 @@ def create_loyalty_class(program, merchant):
         "programName": program.name,
         "hexBackgroundColor": background_color,
         "textModulesData": [] ,
+        "loyaltyPointsModuleData": {
+        "loyaltyPoints": {
+            "label": "Punches"
+        },
+        "secondaryLoyaltyPoints": {
+            "label": "Goal"
+        }
+    },
+    
         "reviewStatus": "UNDER_REVIEW",
-        
         "programLogo": {
             "sourceUri": {
                 "uri": merchant.wallet_logo_url or "https://storage.googleapis.com/wallet-lab-tools-codelab-artifacts-public/pass_google_logo.jpg"
@@ -235,10 +243,18 @@ def create_or_update_loyalty_object(card, program, merchant):
         
         "accountName": f"{merchant.name} Member",
         "accountId": str(card.id)[:8].upper(),
-        
         "loyaltyPoints": {
             "label": "Punches",
-            "balance": {"int": punches},
+            "balance": {
+                "int": punches
+            }
+        },
+
+        "secondaryLoyaltyPoints": {
+            "label": "Goal",
+            "balance": {
+                "int": required
+            }
         },
         
         "barcode": {
@@ -277,7 +293,6 @@ def create_or_update_loyalty_object(card, program, merchant):
         }
     }
     
-    # Add rewards if available
     if card.reward_credits and card.reward_credits > 0:
         loyalty_object["secondaryLoyaltyPoints"] = {
             "label": "Rewards Available",
@@ -365,8 +380,8 @@ def get_save_url(card, program):
         service_account_info = json.load(open(SERVICE_ACCOUNT_FILE))
         issuer_email = service_account_info["client_email"]
         private_key = service_account_info["private_key"]
-        
-        class_id = f"{ISSUER_ID}.{normalize_id(program.id)}"
+        new_class_id = str(program.id) + "v2"
+        class_id = f"{ISSUER_ID}.{normalize_id(new_class_id)}"
         object_id = f"{ISSUER_ID}.{normalize_id(card.id)}"
 
         payload = {
@@ -389,7 +404,7 @@ def get_save_url(card, program):
 def update_pass(card, program, merchant):
     """Update Google Wallet pass after punch/redemption."""
     try:
-        result = create_or_update_loyalty_object(card, program, merchant)
+        result = create_generic_object(card, program, merchant)
         if result:
             logger.info(f"Google Wallet pass updated for card {card.id}")
             return True
@@ -405,8 +420,6 @@ def get_or_create_google(program_id: str, user_id: str):
     from uuid import UUID
     from app.db import SessionLocal
     from app.models import WalletCard, PunchProgram, Merchant
-    
-    
     
     try:
         program_uuid = UUID(program_id)
@@ -450,7 +463,7 @@ def get_or_create_google(program_id: str, user_id: str):
         if not merchant:
             return jsonify({"error": "Merchant not found"}), 404
         
-        result = create_or_update_loyalty_object(card, program, merchant)
+        result = create_generic_object(card, program, merchant)
         
         if not result:
             return jsonify({"error": "Failed to create Google Wallet pass"}), 500
@@ -471,3 +484,188 @@ def get_or_create_google(program_id: str, user_id: str):
         })
         
         
+        
+def create_generic_class(program, merchant):
+    """Create a generic pass class with custom template layout."""
+    # Use 'v2' to ensure a new class ID, avoiding old Loyalty Class remnants
+    new_class_id = str(program.id) + "v2"
+    class_id = f"{ISSUER_ID}.{normalize_id(new_class_id)}"
+    
+    logo_url = merchant.wallet_logo_url or "https://storage.googleapis.com/wallet-lab-tools-codelab-artifacts-public/pass_google_logo.jpg"
+    
+    generic_class = {
+        "id": class_id,
+        "issuerName": merchant.name,
+        "reviewStatus": "UNDER_REVIEW",
+        "hexBackgroundColor": merchant.wallet_brand_color or "#4285f4",
+        
+        "logo": {
+            "sourceUri": {
+                "uri": logo_url
+            }
+        },
+        
+        # Hero image is optional on Generic Pass, but kept for high visibility
+        "heroImage": {
+            "sourceUri": {
+                "uri": logo_url
+            },
+             "contentDescription": {
+                "defaultValue": {"language": "en-US", "value": f"{program.name} rewards banner"}
+            },
+        },
+        
+        "classTemplateInfo": {
+            "cardTemplateOverride": {
+                "cardRowTemplateInfos": [
+                    {
+                        "twoItems": {
+                            "startItem": {
+                                "firstValue": {
+                                    "fields": [
+                                        # 1. PRIMARY: Punches count
+                                        {"fieldPath": "object.textModulesData['punches'].body"} 
+                                    ]
+                                },
+                                "secondValue": {
+                                    "fields": [
+                                        # 2. SECONDARY: Rewards count is placed here
+                                        {"fieldPath": "object.textModulesData['rewards'].body"}
+                                    ]
+                                }
+                            },
+                            "endItem": {
+                                "firstValue": {
+                                    "fields": [
+                                        # 3. PRIMARY: Expiration date
+                                        {"fieldPath": "object.textModulesData['exp'].body"} 
+                                    ]
+                                },
+                                "secondValue": {
+                                    "fields": [
+                                        # 4. SECONDARY: Expiration label
+                                        {"fieldPath": "object.textModulesData['exp'].header"}
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                    # **THE SECOND ROW IS REMOVED**
+                ]
+            }
+        }
+    }
+
+    
+    result = make_api_request("POST", "genericClass", generic_class)
+    
+    if result and result.get("status") == "exists":
+        logger.info(f"Class {class_id} exists, updating...")
+        # Update without reviewStatus
+        generic_class_update = {k: v for k, v in generic_class.items() if k != "reviewStatus"}
+        result = make_api_request("PATCH", f"genericClass/{class_id}", generic_class_update)
+    
+    if result:
+        logger.info(f"Generic class ready: {class_id}")
+    else:
+        logger.error(f"Failed to create/update generic class: {class_id}")
+        
+    return result
+
+def create_generic_object(card, program, merchant):
+    """Create a custom generic pass using Pass Builder layout."""
+    new_class_id = str(program.id) + "v2"
+    class_id = f"{ISSUER_ID}.{normalize_id(new_class_id)}"
+    
+    object_id = f"{ISSUER_ID}.{normalize_id(card.id)}" 
+    
+    # Ensure class exists
+    create_generic_class(program, merchant)
+    
+    punches = card.current_punches or 0
+    required = program.punches_required
+    
+    # ... (Expiration logic remains the same) ...
+    expiration_text = ""
+    if card.expires_at:
+        from datetime import datetime
+        now = datetime.utcnow()
+        days_remaining = (card.expires_at - now).days
+        
+        if days_remaining <= 0:
+            expiration_text = "EXPIRED"
+        elif days_remaining <= 7:
+            expiration_text = f"{days_remaining}d"
+        else:
+            expiration_text = card.expires_at.strftime("%b %d, %Y") 
+            
+    text = program.name
+            
+    if card.reward_credits > 0:
+        text = f"You have {card.reward_credits} rewars to claim"
+        
+    
+    generic_object = {
+        "id": object_id, 
+        "classId": class_id,
+        "state": "ACTIVE",
+        "hasUsers": True,
+        "hasLinkedDevice": True,
+        
+        "cardTitle": {
+            "defaultValue": {
+                "language": "en-US",
+                "value": f"{merchant.name}"
+            }
+        },
+        
+        "header": {
+            "defaultValue": {
+                "language": "en-US",
+                "value": f"{punches}/{required}"
+            }
+        },
+        "subheader": {
+            "defaultValue": {
+                "language": "en-US",
+                "value": text
+            }
+        },
+        
+        "textModulesData": [
+            {
+                "id": "punches",
+                "header": "Punches",
+                "body": f"{punches}/{required}"
+            },
+            {
+                "id": "exp",
+                "header": "Expires",
+                "body": expiration_text
+            },
+            {
+                "id": "rewards",
+                "header": "Rewards",
+                "body": str(card.reward_credits)
+            },
+            {
+                "id": "terms",
+                "header": "Terms and Conditions",
+                "body": program.google_terms_conditions
+            }
+        ],
+        
+        "barcode": {
+            "type": "QR_CODE",
+            "value": str(card.id),
+            "alternateText": str(card.id)[:8].upper()
+        }
+    }
+    
+    # ... (API request logic remains the same) ...
+    result = make_api_request("POST", "genericObject", generic_object)
+    
+    if result and result.get("status") == "exists":
+        result = make_api_request("PATCH", f"genericObject/{object_id}", generic_object)
+
+    return result

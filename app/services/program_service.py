@@ -4,7 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session,joinedload
 
 from app.db import engine
-from app.models import PunchProgram, WalletCard,Merchant, Redemption, MerchantUser
+from app.models import PunchProgram, WalletCard,Merchant, Redemption, MerchantUser, Punch
 from app.services.expiration_service import calculate_expiration_date
 from app.apple_passes import build_pkpass
 from app.exceptions import NotFound
@@ -12,7 +12,6 @@ from app.db import SessionLocal
 import logging
 
 logger = logging.getLogger(__name__)
-
 
 
 def get_program(program_id):
@@ -76,6 +75,9 @@ def get_merchant_programs(merchant_id: str) -> list[dict]:
             .join(WalletCard, WalletCard.id == Redemption.wallet_card_id)
             .where(WalletCard.program_id == program.id)
             ) or 0
+            
+            
+            total_punches = get_total_punches_for_program(program.id)
             result.append({
                      "id": str(program.id),
                     "merchant_id": str(program.merchant_id),
@@ -92,6 +94,7 @@ def get_merchant_programs(merchant_id: str) -> list[dict]:
                     "punches_required": program.punches_required,
                     "active_cards": active_count or 0,
                     "total_redepmtions": redemption_count or 0,
+                    "total_punches": total_punches,
                     "created_at": program.created_at.isoformat()
             })
         
@@ -211,7 +214,7 @@ def get_user_programs(user_id):
                     },
                     'programs': []
                 }
-            
+            total_punches_count = get_total_punches_for_program(program.id)
             merchants_dict[merchant_id]['programs'].append({
                 'id': str(program.id),
                 'name': program.name,
@@ -219,7 +222,20 @@ def get_user_programs(user_id):
                 "active_cards": active_count or 0,
                 "total_redepmtions": redemption_count or 0,
                 'status': program.active ,
+                'total_punches' :total_punches_count,
                 'created_at': program.created_at.isoformat() if program.created_at else None
             })
         
         return merchants_dict
+    
+    
+def get_total_punches_for_program(program_id):
+    """Get total punches for a given program."""
+    with SessionLocal() as db:
+        total = db.query(func.count(Punch.id)).join(
+            WalletCard, WalletCard.id == Punch.wallet_card_id
+        ).filter(
+            WalletCard.program_id == program_id
+        ).scalar()
+        
+        return total or 0
