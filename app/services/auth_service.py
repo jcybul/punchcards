@@ -1,6 +1,7 @@
 # app/services/auth_service.py
 from __future__ import annotations
 
+from datetime import datetime
 import os
 import functools
 from typing import Iterable, Optional
@@ -234,3 +235,16 @@ def user_required_merchant_id_from_card(card_id: str) -> str:
         if not row:
             abort(404, description="Card not found")
         return str(row[0])
+
+
+def update_profile(user_id, first_name, last_name, birth_date=None):
+    """Update user profile."""
+    with SessionLocal() as db:
+        profile = db.query(Profile).get(user_id)
+        if profile:
+            profile.first_name = first_name
+            profile.last_name = last_name
+        if birth_date:
+            profile.birthdate = datetime.fromisoformat(birth_date)           
+            db.commit()
+        return profile

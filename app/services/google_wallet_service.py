@@ -462,7 +462,7 @@ def get_or_create_google(program_id: str, user_id: str):
         merchant = db.get(Merchant, program.merchant_id)
         if not merchant:
             return jsonify({"error": "Merchant not found"}), 404
-        
+                
         result = create_generic_object(card, program, merchant)
         
         if not result:
@@ -483,87 +483,74 @@ def get_or_create_google(program_id: str, user_id: str):
             "reward_credits": card.reward_credits
         })
         
-        
-        
 def create_generic_class(program, merchant):
     """Create a generic pass class with custom template layout."""
-    # Use 'v2' to ensure a new class ID, avoiding old Loyalty Class remnants
+    # Use 'v2' as the stable ID suffix
     new_class_id = str(program.id) + "v2"
     class_id = f"{ISSUER_ID}.{normalize_id(new_class_id)}"
     
-    logo_url = merchant.wallet_logo_url or "https://storage.googleapis.com/wallet-lab-tools-codelab-artifacts-public/pass_google_logo.jpg"
+    # Use logo URL from merchant or fallback
     
     generic_class = {
         "id": class_id,
         "issuerName": merchant.name,
         "reviewStatus": "UNDER_REVIEW",
-        "hexBackgroundColor": merchant.wallet_brand_color or "#4285f4",
-        
-        "logo": {
-            "sourceUri": {
-                "uri": logo_url
-            }
-        },
-        
-        # Hero image is optional on Generic Pass, but kept for high visibility
-        "heroImage": {
-            "sourceUri": {
-                "uri": logo_url
-            },
-             "contentDescription": {
-                "defaultValue": {"language": "en-US", "value": f"{program.name} rewards banner"}
-            },
-        },
+        # Assuming you want to use the merchant color, but falling back to original 
         
         "classTemplateInfo": {
             "cardTemplateOverride": {
-                "cardRowTemplateInfos": [
-                    {
-                        "twoItems": {
-                            "startItem": {
-                                "firstValue": {
-                                    "fields": [
-                                        # 1. PRIMARY: Punches count
-                                        {"fieldPath": "object.textModulesData['punches'].body"} 
-                                    ]
-                                },
-                                "secondValue": {
-                                    "fields": [
-                                        # 2. SECONDARY: Rewards count is placed here
-                                        {"fieldPath": "object.textModulesData['rewards'].body"}
-                                    ]
-                                }
-                            },
-                            "endItem": {
-                                "firstValue": {
-                                    "fields": [
-                                        # 3. PRIMARY: Expiration date
-                                        {"fieldPath": "object.textModulesData['exp'].body"} 
-                                    ]
-                                },
-                                "secondValue": {
-                                    "fields": [
-                                        # 4. SECONDARY: Expiration label
-                                        {"fieldPath": "object.textModulesData['exp'].header"}
-                                    ]
-                                }
-                            }
+            "cardRowTemplateInfos": [
+                {
+                "twoItems": {
+                    "startItem": {
+                    "firstValue": {
+                        "fields": [
+                        {
+                            "fieldPath": "object.textModulesData['punches']"
                         }
+                        ]
                     }
-                    # **THE SECOND ROW IS REMOVED**
-                ]
+                    },
+                    "endItem": {
+                    "firstValue": {
+                        "fields": [
+                        {
+                            "fieldPath": "object.textModulesData['rewards']"
+                        }
+                        ]
+                    }
+                    }
+                }
+                },
+                {
+                "oneItem": {
+                    "item": {
+                    "firstValue": {
+                        "fields": [
+                        {
+                            "fieldPath": "object.textModulesData['exp']"
+                        }
+                        ]
+                    }
+                    }
+                }
+                }
+            ]
             }
         }
-    }
-
+ }
     
-    result = make_api_request("POST", "genericClass", generic_class)
+    result = make_api_request("POST", "genericClass", generic_class) # Fixed endpoint to plural
     
     if result and result.get("status") == "exists":
-        logger.info(f"Class {class_id} exists, updating...")
-        # Update without reviewStatus
+        # Class exists, force a full replacement update using PUT
+        logger.info(f"Class {class_id} exists, forcing full update via PUT...")
+        
         generic_class_update = {k: v for k, v in generic_class.items() if k != "reviewStatus"}
-        result = make_api_request("PATCH", f"genericClass/{class_id}", generic_class_update)
+        
+        # Use SINGULAR endpoint and APPEND the ID
+        endpoint = f"genericClass/{class_id}"
+        result = make_api_request("PUT", endpoint, generic_class_update)
     
     if result:
         logger.info(f"Generic class ready: {class_id}")
@@ -597,13 +584,7 @@ def create_generic_object(card, program, merchant):
         elif days_remaining <= 7:
             expiration_text = f"{days_remaining}d"
         else:
-            expiration_text = card.expires_at.strftime("%b %d, %Y") 
-            
-    text = program.name
-            
-    if card.reward_credits > 0:
-        text = f"You have {card.reward_credits} rewars to claim"
-        
+            expiration_text = card.expires_at.strftime("%b %d, %Y")  
     
     generic_object = {
         "id": object_id, 
@@ -611,24 +592,29 @@ def create_generic_object(card, program, merchant):
         "state": "ACTIVE",
         "hasUsers": True,
         "hasLinkedDevice": True,
+        "logo": {
+        "sourceUri": {
+            "uri": merchant.wallet_logo_url or "https://storage.googleapis.com/wallet-lab-tools-codelab-artifacts-public/pass_google_logo.jpg"
+        },
+        "contentDescription": {
+        "defaultValue": {
+            "language": "en-US",
+            "value": "LOGO_IMAGE_DESCRIPTION"
+        }
+        }
+    },
         
         "cardTitle": {
             "defaultValue": {
                 "language": "en-US",
-                "value": f"{merchant.name}"
+                "value": merchant.name
             }
         },
         
         "header": {
             "defaultValue": {
                 "language": "en-US",
-                "value": f"{punches}/{required}"
-            }
-        },
-        "subheader": {
-            "defaultValue": {
-                "language": "en-US",
-                "value": text
+                "value": program.name
             }
         },
         
@@ -659,13 +645,22 @@ def create_generic_object(card, program, merchant):
             "type": "QR_CODE",
             "value": str(card.id),
             "alternateText": str(card.id)[:8].upper()
-        }
+        },
+        "hexBackgroundColor": merchant.wallet_brand_color or "#4285f4",
+
+        "heroImage": {
+            "sourceUri": {
+            "uri": merchant.wallet_logo_url or "https://storage.googleapis.com/wallet-lab-tools-codelab-artifacts-public/pass_google_logo.jpg"
+            }
+                }
     }
     
-    # ... (API request logic remains the same) ...
     result = make_api_request("POST", "genericObject", generic_object)
     
     if result and result.get("status") == "exists":
-        result = make_api_request("PATCH", f"genericObject/{object_id}", generic_object)
+        logger.info(f"Object {object_id} exists, updating via PUT...")
+        
+        endpoint = f"genericObject/{object_id}"
+        result = make_api_request("PUT", endpoint, generic_object)
 
     return result

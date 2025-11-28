@@ -156,13 +156,10 @@ def _build_pass_json(
         # Format expiration text
         if days_remaining <= 0:
             expiration_text = "EXPIRED"
-            expiration_label = "Status"
+            expiration_label = "STATUS"
         elif days_remaining <= 7:
             expiration_text = f"Expires in {days_remaining} day{'s' if days_remaining != 1 else ''}"
-            expiration_label = "URGENT"
-        elif days_remaining <= 30:
-            expiration_text = f"Expires in {days_remaining} days"
-            expiration_label = "VALID UNTIL"
+            expiration_label = "STATUS"
         else:
             expiration_text = expires_at.strftime("%b %d, %Y")
             expiration_label = "VALID UNTIL"

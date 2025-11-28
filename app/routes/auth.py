@@ -4,9 +4,9 @@ from __future__ import annotations
 import os
 import requests
 from flask import Blueprint, request, jsonify, abort
-from app.services.auth_service import require_auth, current_user_id
+from app.services.auth_service import require_auth, current_user_id , update_profile
 
-bp = Blueprint("auth_routes", __name__, url_prefix="/auth")
+bp = Blueprint("auth_routes", __name__)
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
@@ -28,7 +28,33 @@ def me():
     return jsonify({"user_id": current_user_id()}), 200
 
 
-# OPTIONAL: admin-created user, auto-confirmed (requires Service Role key)
+
+
+@bp.get("/update_user_profile")
+@require_auth
+def update_user_profile():
+    
+    try:
+        user_id = current_user_id()
+        data = request.json
+        
+        first_name = data.get('first_name')
+        last_name = data.get('last_name')
+        birth_date = data.get('birth_date')
+        
+        update_profile(user_id,first_name,last_name,birth_date)
+        
+        return {
+            'success': True,
+
+        }, 200
+        
+    except Exception as e:
+        return {'error': str(e)}, 500
+    
+
+
+
 @bp.post("/signup-admin")
 def signup_admin():
     """Create a user as admin (auto-confirm). Do NOT expose this publicly; protect with your own secret or platform role."""
