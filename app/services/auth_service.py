@@ -247,4 +247,5 @@ def update_profile(user_id, first_name, last_name, birth_date=None):
         if birth_date:
             profile.birthdate = datetime.fromisoformat(birth_date)           
             db.commit()
+            db.refresh(profile)
         return profile

@@ -30,28 +30,39 @@ def me():
 
 
 
-@bp.get("/update_user_profile")
+@bp.post("/update_user_profile")
 @require_auth
 def update_user_profile():
-    
+    """Update user's profile information."""
     try:
         user_id = current_user_id()
         data = request.json
         
-        first_name = data.get('first_name')
-        last_name = data.get('last_name')
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        first_name = data.get('first_name', '').strip()
+        last_name = data.get('last_name', '').strip()
         birth_date = data.get('birth_date')
         
-        update_profile(user_id,first_name,last_name,birth_date)
+        # Validate required fields
+        if not first_name or not last_name:
+            return jsonify({'error': 'first_name and last_name are required'}), 400
         
-        return {
+        # Update profile
+        profile = update_profile(user_id, first_name, last_name, birth_date)
+        
+        return jsonify({
             'success': True,
-
-        }, 200
+            'user_id': str(user_id),
+            'first_name': profile.first_name,
+            'last_name': profile.last_name,
+            'birth_date': profile.birthdate.isoformat() if profile.birthdate else None
+        }), 200
         
     except Exception as e:
-        return {'error': str(e)}, 500
-    
+        return jsonify({'error': str(e)}), 500
+
 
 
 
