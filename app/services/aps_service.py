@@ -93,7 +93,7 @@ def send_push_notification(card_id: str) -> dict:
         
         headers = {
             "authorization": f"bearer {auth_token}",
-            "apns-topic": os.getenv("PASS_TYPE_ID"),  # Your pass type ID
+            "apns-topic": os.getenv("PASS_TYPE_ID"),
             "apns-push-type": "background",
             "apns-priority": "5"
         }

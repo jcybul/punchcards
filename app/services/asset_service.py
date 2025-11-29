@@ -6,6 +6,7 @@ from pathlib import Path
 import os
 import time
 import logging
+from app.services.cache_service import fetch_and_cache_image
 
 
 logger = logging.getLogger(__name__)
@@ -43,11 +44,10 @@ def get_program_icon(icon_url: str | None, icon_type: str) -> bytes | None:
         bytes of icon image
     """
     if icon_url:
-        icon = download_from_url(icon_url)
+        icon = fetch_and_cache_image(icon_url)
         if icon:
             return icon
         
-    
     filename = f"mug_{icon_type}.png"
     local_path = LOCAL_ASSETS / filename
     
@@ -69,7 +69,7 @@ def get_merchant_logo(logo_url: str ) -> bytes | None:
         bytes of icon image
     """
     if logo_url:
-        logo = download_from_url(logo_url)
+        logo = fetch_and_cache_image(logo_url)
         if logo:
             return logo
         else:
@@ -93,7 +93,7 @@ def get_default_asset(filename: str) -> bytes | None:
     
     if local_path.exists():
         elapsed_ms = (time.time() - start) * 1000
-        logger.debug(f"📦 {filename}: {elapsed_ms:.0f}ms")
+        logger.debug(f"{filename}: {elapsed_ms:.0f}ms")
         return local_path.read_bytes()
     
     print(f"Warning: Asset {filename} not found")

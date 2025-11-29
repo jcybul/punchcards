@@ -68,7 +68,7 @@ def _build_pass_json(
         secondary_fields =[
             {
                 "key": "rewards",
-                "label": "REWARDS AVAILABLE",
+                "label": "REWARDS",
                 "value": str(reward_credits)
             },
             {
@@ -411,7 +411,7 @@ def build_pkpass(card, program,merchant, *, logo_text: str | None = None, use_dy
     # 2) Sign manifest and append signature
     t5 = time.time()
     files = _sign_manifest_and_collect(files)
-    logger.info(f"  ├─ Manifest signed: {(time.time() - t5)*1000:.0f}ms")
+    logger.debug(f"  ├─ Manifest signed: {(time.time() - t5)*1000:.0f}ms")
 
     # 3) Create the pkpass ZIP in memory
     t6 = time.time()
@@ -423,6 +423,6 @@ def build_pkpass(card, program,merchant, *, logo_text: str | None = None, use_dy
     logger.debug(f"  ├─ ZIP created: {(time.time() - t6)*1000:.0f}ms")
     
     total = (time.time() - overall_start) * 1000
-    logger.debug(f"  └─ ✅ Total: {total:.0f}ms")
+    logger.info(f"  └─ Total: {total:.0f}ms")
 
     return buf.getvalue()
