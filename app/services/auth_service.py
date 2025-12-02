@@ -1,6 +1,7 @@
 # app/services/auth_service.py
 from __future__ import annotations
 
+from datetime import datetime
 import os
 import functools
 from typing import Iterable, Optional
@@ -155,7 +156,6 @@ def require_merchant_role(merchant_id: str, allowed: Iterable[str] = ("owner", "
     uid = getattr(g, "user_id", None)
     if not uid:
         abort(401, description="Unauthorized")
-    print(merchant_id,uid)
     with Session(engine) as s:
         row = s.execute(
             select(MerchantUser.role).where(
@@ -209,7 +209,6 @@ def verify_cron_token(f):
     def cron_wrapper(*args, **kwargs):
         token = request.headers.get('X-Cron-Token')
         expected_token = os.getenv('CRON_TOKEN')
-        print(expected_token)
         if not token or token != expected_token:
             return {'error': 'Unauthorized Missing cron token or token is incorrect'}, 403
         
@@ -234,3 +233,17 @@ def user_required_merchant_id_from_card(card_id: str) -> str:
         if not row:
             abort(404, description="Card not found")
         return str(row[0])
+
+
+def update_profile(user_id, first_name, last_name, birth_date=None):
+    """Update user profile."""
+    with SessionLocal() as db:
+        profile = db.query(Profile).get(user_id)
+        if profile:
+            profile.first_name = first_name
+            profile.last_name = last_name
+        if birth_date:
+            profile.birthdate = datetime.fromisoformat(birth_date)           
+            db.commit()
+            db.refresh(profile)
+        return profile

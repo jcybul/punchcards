@@ -11,4 +11,7 @@ gcloud run deploy punchcard-api-staging \
   --project=punchcards
 
 
-  
+## staging commands  
+docker build --platform linux/amd64 --no-cache -t gcr.io/punchcards/punchcard-api-staging:latest .
+
+docker push gcr.io/punchcards/punchcard-api-staging:latest

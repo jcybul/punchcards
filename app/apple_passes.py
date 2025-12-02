@@ -68,7 +68,7 @@ def _build_pass_json(
         secondary_fields =[
             {
                 "key": "rewards",
-                "label": "REWARDS AVAILABLE",
+                "label": "REWARDS",
                 "value": str(reward_credits)
             },
             {
@@ -93,7 +93,7 @@ def _build_pass_json(
         "teamIdentifier": TEAM_ID,
         "organizationName": org,               
         "description": f"{org} Punch Card", 
-        "logoText": logo_text or org, 
+        #"logoText": logo_text or org, 
         "serialNumber": serial,
         "foregroundColor": f"rgb({hex_to_rgb(foreground_color)})",
         "backgroundColor": f"rgb({hex_to_rgb(background_color)})",
@@ -156,13 +156,10 @@ def _build_pass_json(
         # Format expiration text
         if days_remaining <= 0:
             expiration_text = "EXPIRED"
-            expiration_label = "Status"
+            expiration_label = "STATUS"
         elif days_remaining <= 7:
             expiration_text = f"Expires in {days_remaining} day{'s' if days_remaining != 1 else ''}"
-            expiration_label = "URGENT"
-        elif days_remaining <= 30:
-            expiration_text = f"Expires in {days_remaining} days"
-            expiration_label = "VALID UNTIL"
+            expiration_label = "STATUS"
         else:
             expiration_text = expires_at.strftime("%b %d, %Y")
             expiration_label = "VALID UNTIL"
@@ -414,7 +411,7 @@ def build_pkpass(card, program,merchant, *, logo_text: str | None = None, use_dy
     # 2) Sign manifest and append signature
     t5 = time.time()
     files = _sign_manifest_and_collect(files)
-    logger.info(f"  ├─ Manifest signed: {(time.time() - t5)*1000:.0f}ms")
+    logger.debug(f"  ├─ Manifest signed: {(time.time() - t5)*1000:.0f}ms")
 
     # 3) Create the pkpass ZIP in memory
     t6 = time.time()
@@ -426,6 +423,6 @@ def build_pkpass(card, program,merchant, *, logo_text: str | None = None, use_dy
     logger.debug(f"  ├─ ZIP created: {(time.time() - t6)*1000:.0f}ms")
     
     total = (time.time() - overall_start) * 1000
-    logger.debug(f"  └─ ✅ Total: {total:.0f}ms")
+    logger.info(f"  └─ Total: {total:.0f}ms")
 
     return buf.getvalue()

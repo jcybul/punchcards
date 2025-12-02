@@ -49,7 +49,7 @@ def create_app():
 
     app.register_blueprint(api_bp, url_prefix="/api")
     app.register_blueprint(user_bp,url_prefix="/api/user")
-    app.register_blueprint(auth_bp,url_prefix="/auth")
+    app.register_blueprint(auth_bp,url_prefix="/api/auth")
     app.register_blueprint(passes_bp,url_prefix="/api/passes")
     app.register_blueprint(redemption_bp,url_prefix="/api/redemptions")
     app.register_blueprint(program_bp,url_prefix="/api/program")

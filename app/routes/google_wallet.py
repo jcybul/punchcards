@@ -130,3 +130,4 @@ def test_config():
         "GOOGLE_WALLET_SERVICE_ACCOUNT_FILE": os.getenv("GOOGLE_WALLET_SERVICE_ACCOUNT_FILE"),
         "file_exists": os.path.exists(os.getenv("GOOGLE_WALLET_SERVICE_ACCOUNT_FILE", ""))
     }
+    

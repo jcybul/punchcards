@@ -1,6 +1,6 @@
 from flask import Blueprint, abort, jsonify, request
 from app.exceptions import NotFound
-from app.services.program_service import get_program, get_merchant_programs, get_user_programs
+from app.services.program_service import get_program, get_merchant_programs, get_user_programs, get_total_punches_for_program
 from app.services.auth_service import require_auth, require_merchant_role, current_user_id
 import logging
 from ..db import engine
@@ -26,10 +26,10 @@ def get_user_programs_():
     user_id = current_user_id()
     
     if not user_id:
-        return jsonify({"error": "Failed to fetch user"}), 500  # ← Proper format
+        return jsonify({"error": "Failed to fetch user"}), 500 
     
     try:
-        programs = get_user_programs(user_id)  # ← Calls the service function
+        programs = get_user_programs(user_id)
         
         return jsonify({
             "success": True,
@@ -37,7 +37,7 @@ def get_user_programs_():
         }), 200
         
     except Exception as e:
-        logger.error(f"Error getting user programs: {e}")  # ← Log the error
+        logger.error(f"Error getting user programs: {e}") 
         import traceback
         traceback.print_exc()
         
@@ -59,3 +59,4 @@ def merchant_programs(merchant_id: str):
         }), 200
     except NotFound as e:
         abort(404, description=str(e))
+

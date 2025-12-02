@@ -93,10 +93,9 @@ class PunchProgram(Base):
     expiration_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=True) 
     expiration_months: Mapped[int] = mapped_column(Integer, default=6, nullable=True) ##
     expiration_type: Mapped[str] = mapped_column(Text, default='rolling', nullable=True)
-    expiration_extension_months: Mapped[int] = mapped_column(Integer, default=3, nullable=True)
+    expiration_extension_days: Mapped[int] = mapped_column(Integer, default=3, nullable=True)
     expiration_max_months: Mapped[int | None] = mapped_column(Integer)
     expiration_warning_days: Mapped[int] = mapped_column(Integer, default=30, nullable=True)
-    
     # logs
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow,nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow,nullable=True)
@@ -173,12 +172,9 @@ class WalletDeviceReg(Base):
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-
-    __table_args__ = (
-        # one registration per (card, device)
-        UniqueConstraint("card_id", "device_library_id", name="uq_card_device"),
-    )
     
+    
+
 # NEW: profiles (global role for platform-wide admin)
 # app/models.py (Profile only)
 from sqlalchemy import Text, Date, DateTime
