@@ -156,7 +156,6 @@ def require_merchant_role(merchant_id: str, allowed: Iterable[str] = ("owner", "
     uid = getattr(g, "user_id", None)
     if not uid:
         abort(401, description="Unauthorized")
-    print(merchant_id,uid)
     with Session(engine) as s:
         row = s.execute(
             select(MerchantUser.role).where(
@@ -210,7 +209,6 @@ def verify_cron_token(f):
     def cron_wrapper(*args, **kwargs):
         token = request.headers.get('X-Cron-Token')
         expected_token = os.getenv('CRON_TOKEN')
-        print(expected_token)
         if not token or token != expected_token:
             return {'error': 'Unauthorized Missing cron token or token is incorrect'}, 403
         

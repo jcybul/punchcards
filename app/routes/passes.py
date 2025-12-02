@@ -64,6 +64,8 @@ def get_or_create_user_pass():
     program_id = request.args.get('program_id')
     user_id = current_user_id()
     
+    print(user_id)
+    
     if not program_id or not user_id:
         return Response(
             json.dumps({"error": "Missing required parameters: program_id and user_id."}),
