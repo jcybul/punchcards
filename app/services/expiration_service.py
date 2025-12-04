@@ -189,16 +189,16 @@ def process_expired_cards():
             message = f"Your {merchant.name} punch card has expired. Visit the store to get a new card and keep earning rewards!"
             
             # from app.models import WalletDeviceReg
-            # registrations = db.query(WalletDeviceReg).filter_by(
-            #     card_id=card.id
-            # ).all()
+            registrations = db.query(WalletDeviceReg).filter_by(
+                card_id=card.id
+            ).all()
             
-            # for reg in registrations:
-            #     if reg.push_token:
-            #         try:
-            #             send_push_notification(reg.push_token, message=message)
-            #         except Exception as e:
-            #             logger.error(f"Failed to send expired notification: {e}")
+            for reg in registrations:
+                if reg.push_token:
+                    try:
+                        send_push_notification(reg.push_token, message=message)
+                    except Exception as e:
+                        logger.error(f"Failed to send expired notification: {e}")
         
         db.commit()
         
