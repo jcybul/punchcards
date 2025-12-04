@@ -3,6 +3,7 @@
 Handle card expiration logic.
 """
 from datetime import datetime, timedelta
+import time
 from app.db import SessionLocal
 from app.models import WalletCard, PunchProgram, WalletDeviceReg
 from app.services.aps_service import send_push_notification
@@ -158,6 +159,8 @@ def process_expired_cards():
     """
     Deactivate expired cards and update both Apple and Google passes.
     """
+    
+    logger.info("Processing Expired Cards")
     with SessionLocal() as db:
         now = datetime.utcnow()
         
@@ -166,6 +169,8 @@ def process_expired_cards():
             WalletCard.expires_at <= now,
             WalletCard.status == 'active'
         ).all()
+        
+        print(expired_cards)
         
         for card in expired_cards:
             # Get program and merchant info
@@ -176,7 +181,10 @@ def process_expired_cards():
             # Deactivate card
             old_status = card.status
             card.status = 'expired'
+            card.update_tag = int(time.time())
             
+            db.commit()
+            db.refresh(card)
             logger.info(f"Expired card {card.id} (was {old_status})")
             
             if card.google_object_id:
@@ -187,18 +195,14 @@ def process_expired_cards():
                     logger.error(f"Failed to update Google Wallet pass: {e}")
             
             
-            registrations = db.query(WalletDeviceReg).filter_by(
-                card_id=card.id
-            ).all()
+            apple_devices = db.query(WalletDeviceReg).filter_by(card_id=card.id).count()
             
-            for reg in registrations:
-                if reg.push_token:
-                    try:
-                        send_push_notification(card.id)
-                    except Exception as e:
-                        logger.error(f"Failed to send expired notification: {e}")
-        
-        db.commit()
+            if apple_devices > 0:
+                from app.services.aps_service import notify_pass_updated
+                notify_pass_updated(str(card.id))
+                logger.info(f"Sent Apple push notification to {apple_devices} devices")
+            
+       
         
         logger.info(f"Processed {len(expired_cards)} expired cards")
         return len(expired_cards)
