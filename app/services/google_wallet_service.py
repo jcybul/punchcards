@@ -14,7 +14,6 @@ import jwt
 import requests
 from google.oauth2 import service_account
 import google.auth.transport.requests
-from app.services.expiration_service import calculate_expiration_date
 from app.services.utils_functions_service import ensure_naive_utc
 
 logger = logging.getLogger(__name__)
@@ -420,7 +419,8 @@ def get_or_create_google(program_id: str, user_id: str):
     from uuid import UUID
     from app.db import SessionLocal
     from app.models import WalletCard, PunchProgram, Merchant
-    
+    from app.services.expiration_service import calculate_expiration_date
+
     try:
         program_uuid = UUID(program_id)
         user_uuid = UUID(user_id)

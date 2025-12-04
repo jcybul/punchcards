@@ -3,9 +3,12 @@
 Handle card expiration logic.
 """
 from datetime import datetime, timedelta
+import time
 from app.db import SessionLocal
 from app.models import WalletCard, PunchProgram, WalletDeviceReg
 from app.services.aps_service import send_push_notification
+from app.services.google_wallet_service import create_generic_object
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -137,7 +140,7 @@ def send_expiration_warnings():
                 for reg in registrations:
                     if reg.push_token:
                         try:
-                            send_push_notification(reg.push_token, message=message)
+                            send_push_notification(card.id)
                             logger.info(f"Sent expiration warning for card {card.id}")
                         except Exception as e:
                             logger.error(f"Failed to send expiration warning: {e}")
@@ -156,6 +159,8 @@ def process_expired_cards():
     """
     Deactivate expired cards and update both Apple and Google passes.
     """
+    
+    logger.info("Processing Expired Cards")
     with SessionLocal() as db:
         now = datetime.utcnow()
         
@@ -164,6 +169,8 @@ def process_expired_cards():
             WalletCard.expires_at <= now,
             WalletCard.status == 'active'
         ).all()
+        
+        print(expired_cards)
         
         for card in expired_cards:
             # Get program and merchant info
@@ -174,33 +181,28 @@ def process_expired_cards():
             # Deactivate card
             old_status = card.status
             card.status = 'expired'
+            card.update_tag = int(time.time())
             
+            db.commit()
+            db.refresh(card)
             logger.info(f"Expired card {card.id} (was {old_status})")
             
             if card.google_object_id:
                 try:
-                    from app.services.google_wallet_service import create_or_update_loyalty_object
-                    create_or_update_loyalty_object(card, program, merchant)
+                    create_generic_object(card, program, merchant)
                     logger.info(f"Marked Google Wallet pass as expired for card {card.id}")
                 except Exception as e:
                     logger.error(f"Failed to update Google Wallet pass: {e}")
             
-            # Send Apple Wallet notification
-            message = f"Your {merchant.name} punch card has expired. Visit the store to get a new card and keep earning rewards!"
             
-            # from app.models import WalletDeviceReg
-            # registrations = db.query(WalletDeviceReg).filter_by(
-            #     card_id=card.id
-            # ).all()
+            apple_devices = db.query(WalletDeviceReg).filter_by(card_id=card.id).count()
             
-            # for reg in registrations:
-            #     if reg.push_token:
-            #         try:
-            #             send_push_notification(reg.push_token, message=message)
-            #         except Exception as e:
-            #             logger.error(f"Failed to send expired notification: {e}")
-        
-        db.commit()
+            if apple_devices > 0:
+                from app.services.aps_service import notify_pass_updated
+                notify_pass_updated(str(card.id))
+                logger.info(f"Sent Apple push notification to {apple_devices} devices")
+            
+       
         
         logger.info(f"Processed {len(expired_cards)} expired cards")
         return len(expired_cards)
