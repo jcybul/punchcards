@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 import os
 import functools
+import time
 from typing import Iterable, Optional
 
 import jwt
@@ -235,15 +236,32 @@ def user_required_merchant_id_from_card(card_id: str) -> str:
         return str(row[0])
 
 
-def update_profile(user_id, first_name, last_name, birth_date=None):
-    """Update user profile."""
+def update_profile(user_id, first_name, last_name, birth_date=None, max_retries=5):
+    """Update user profile with retry logic for async profile creation."""
     with SessionLocal() as db:
-        profile = db.query(Profile).get(user_id)
-        if profile:
+        profile = None
+        
+        for attempt in range(max_retries):
+            profile = db.query(Profile).filter_by(id=user_id).first()
+            
+            if profile:
+                break
+            
+            if attempt < max_retries - 1:
+                delay = 0.2 * (2 ** attempt)
+                time.sleep(delay)
+        
+        if not profile:
+            return None
+        
+        if first_name:
             profile.first_name = first_name
+        if last_name:
             profile.last_name = last_name
         if birth_date:
-            profile.birthdate = datetime.fromisoformat(birth_date)           
-            db.commit()
-            db.refresh(profile)
+            profile.birthdate = datetime.fromisoformat(birth_date)
+        
+        db.commit()
+        db.refresh(profile)
+        
         return profile
